@@ -82,12 +82,14 @@ export class AnatomySystem {
     const part = this.parts[hit.bodyPart];
     if (!part) return null;
     const weapon = hit.weapon;
-    const type = hit.attackType === 'thrust' || hit.halfSword ? 'pierce' : weapon.type;
+    const type = hit.attackType === 'thrust' || hit.halfSword ? 'pierce' : weapon.type === 'cut' && hit.edgeAlignment !== undefined && hit.edgeAlignment < .2 ? 'blunt' : weapon.type;
     const armor = ARMOR[part.armor];
-    const energy = clamp(hit.relativeVelocity / 5.5, .48, 1.6) * (hit.power ?? 1);
+    const energy = clamp((hit.relativeVelocity - BALANCE.impact.minSpeed) / (hit.heavyDamageVelocity || 4.4), 0, 1.6) * (hit.power ?? 1);
     const protection = armor[type] * (.25 + .75 * part.armorCondition / 100);
     const penetration = type === 'pierce' ? weapon.penetration * .53 : weapon.penetration * .13;
-    const damage = (type === 'blunt' ? weapon.blunt : weapon.cutting) * energy * (1 - Math.max(0, protection - penetration));
+    const edge = hit.edgeAlignment === undefined ? 1 : .16 + .84 * hit.edgeAlignment;
+    const region = hit.bladeRegion === 'tip' ? .85 : hit.bladeRegion === 'base' ? .55 : 1;
+    const damage = (type === 'blunt' ? weapon.blunt : weapon.cutting * edge * region) * energy * (1 - Math.max(0, protection - penetration));
     const trauma = weapon.blunt * energy * (1 - armor.blunt) * (type === 'blunt' ? 1 : .58);
     const armorLoss = (damage * .32 + trauma * .27) * (weapon.mass / 1.6);
     if(armor.durability>0)part.armorCondition = clamp(part.armorCondition - armorLoss);

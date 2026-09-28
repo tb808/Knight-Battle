@@ -17,6 +17,28 @@ export const WEAPONS = {
   arming: { name: 'Arming Sword', type: 'cut', mass: 1.1, speed: 1.18, penetration: .4, cutting: 29, blunt: 10, reach: 1.15, stamina: 16, icon: 'sword' },
 };
 
+// Mouse motion changes intent; the weapon reaches that intent through torque.
+export const WEAPON_CONTROL = {
+  horizontalSensitivity: .008, verticalSensitivity: .007,
+  horizontalRange: 100 * Math.PI / 180, verticalMin: -70 * Math.PI / 180,
+  verticalMax: 80 * Math.PI / 180, readyYaw: -.72, readyPitch: .28,
+  springStrength: 100, springDamping: 15, maxAngularAcceleration: 48,
+  maxAngularVelocity: 8, returnStrength: 26, returnDamping: 11,
+  maxReach: .48, thrustSpeed: 3.1, reachSpring: 70, reachDamping: 13,
+  torsoRotationInfluence: .19, ikStrength: 1,
+  minimumDamageVelocity: 1.1, heavyDamageVelocity: 8,
+  contactCooldown: .24, bladeRadius: .045,
+};
+
+export const WEAPON_DYNAMICS = {
+  longsword: { inertiaMultiplier: 1, controlResponsiveness: 1, recoverySpeed: 1, secondaryGrip: -.17 },
+  dagger: { inertiaMultiplier: .4, controlResponsiveness: 1.5, recoverySpeed: 1.4 },
+  axe: { inertiaMultiplier: 2.1, controlResponsiveness: .76, recoverySpeed: .7, secondaryGrip: -.13 },
+  spear: { inertiaMultiplier: 2.4, controlResponsiveness: .68, recoverySpeed: .7, secondaryGrip: -.2 },
+  mace: { inertiaMultiplier: 1.7, controlResponsiveness: .82, recoverySpeed: .8 },
+  arming: { inertiaMultiplier: .7, controlResponsiveness: 1.18, recoverySpeed: 1.18 },
+};
+
 export const ARMOR = {
   none: { label: 'Bare skin', cut: 0, pierce: 0, blunt: 0, durability: 0 },
   trousers: { label: 'Linen trousers', cut: .025, pierce: .01, blunt: 0, durability: 0 },
@@ -58,8 +80,7 @@ export const INJURIES = {
 
 export const DEFAULT_CONTROLS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', dodge: 'ShiftLeft',
-  kick: 'KeyX', stance: 'KeyZ', halfSword: 'KeyT', lock: 'AltLeft', thrust: 'Space',
-  overhead: 'KeyR', low: 'KeyF', leftSlash: 'KeyQ', rightSlash: 'KeyE', debug: 'F2',
+  stance: 'KeyZ', halfSword: 'KeyT', lock: 'AltLeft', thrust: 'Space', debug: 'F2',
 };
 
 export const COLORS = { healthy: '#969b95', minor: '#c6ab66', medium: '#d28a49', severe: '#bd4d40', critical: '#6d2429' };

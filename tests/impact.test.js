@@ -4,84 +4,106 @@ import * as THREE from 'three';
 import { Character } from '../src/actor.js';
 import { CombatSystem } from '../src/combat.js';
 import { AnatomySystem } from '../src/anatomy.js';
-import { DEFAULT_CONTROLS, WEAPONS } from '../src/config.js';
+import { DEFAULT_CONTROLS, WEAPONS, WEAPON_CONTROL } from '../src/config.js';
+import { sweepWeapons } from '../src/collision.js';
 
-function setup(direction='left',weapon='longsword'){
-  const scene=new THREE.Scene(),events=[],sounds=[],bursts=[];
-  const player=new Character(scene,{name:'Player',player:true}),enemy=new Character(scene,{name:'Opponent',position:[0,0,-1.35]});
-  enemy.root.rotation.y=Math.PI;player.equip(weapon);
-  const combat=new CombatSystem({sound:(...args)=>sounds.push(args),burst:(...args)=>bursts.push(args)},e=>events.push(e));
-  const step=()=>{combat.time+=1/60;for(const a of [player,enemy]){combat.tick(a,1/60);a.animate(1/60,combat.time);}combat.resolve(player,[enemy],1/60);};
-  const contact=()=>{for(let i=0;i<120&&!events.length;i++)step();};
-  combat.startAttack(player,direction);
-  return {player,enemy,combat,events,sounds,bursts,step,contact};
+function yard(distance=1.6,guard=false){
+  const scene=new THREE.Scene(),events=[];
+  const player=new Character(scene,{name:'Player',player:true});
+  const enemy=new Character(scene,{name:'Enemy',position:[0,0,-distance]});
+  enemy.root.rotation.y=Math.PI;
+  if(!guard){enemy.weaponControl.yaw=enemy.weaponControl.desiredYaw=1.2;enemy.weaponControl.pitch=enemy.weaponControl.desiredPitch=.7;}
+  enemy.animate(0,0);
+  const combat=new CombatSystem({sound(){},burst(){}},event=>events.push(event));
+  const step=()=>{
+    combat.time+=1/60;
+    player.weaponPrevious=player.bladeWorld();enemy.weaponPrevious=enemy.bladeWorld();
+    player.weaponControl.step(1/60);player.animate(1/60,combat.time);enemy.animate(1/60,combat.time);
+    combat.resolve(player,[enemy],1/60);
+  };
+  return {player,enemy,combat,events,step};
 }
 
-test('Attack, movement and utility bindings have no conflicts',()=>{
+test('Bindings leave the mouse as the only player swing input',()=>{
   assert.equal(new Set(Object.values(DEFAULT_CONTROLS)).size,Object.keys(DEFAULT_CONTROLS).length);
-  assert.equal(DEFAULT_CONTROLS.leftSlash,'KeyQ');assert.equal(DEFAULT_CONTROLS.rightSlash,'KeyE');
-  assert.equal(DEFAULT_CONTROLS.overhead,'KeyR');assert.equal(DEFAULT_CONTROLS.low,'KeyF');
-  assert.equal(DEFAULT_CONTROLS.freeLook,undefined);
+  for(const key of ['leftSlash','rightSlash','overhead','low'])assert.equal(DEFAULT_CONTROLS[key],undefined);
+  const {player,combat}=yard();
+  assert.equal('startAttack' in combat,false);
+  assert.equal(player.attack,undefined);
 });
 
-test('Both fighters remain unarmored after reset with cloth only on the legs',()=>{
-  const {player,enemy}=setup();
-  for(const a of [player,enemy]){
-    a.reset();
-    assert.equal(a.shield,undefined);assert.equal(a.cape,undefined);assert.equal(a.weaponMotion,undefined);
-    for(const p of Object.values(a.anatomy.parts))assert.equal(p.armor,/Thigh|LowerLeg/.test(p.id)?'trousers':'none');
-    assert.equal(a.parts.torso.material.metalness,0);assert.equal(a.parts.head.material.metalness,0);
-  }
+test('Mouse deltas set free angular targets while inertia delays movement and reversal',()=>{
+  const {player,step}=yard();const control=player.weaponControl;
+  control.setActive(true);control.addMouseDelta(180,-40);
+  assert.ok(control.desiredYaw>0&&control.desiredPitch>WEAPON_CONTROL.readyPitch);
+  step();assert.ok(control.yaw<0&&control.pitch<control.desiredPitch);
+  for(let i=0;i<20;i++)step();
+  assert.ok(control.yaw>-.4&&control.yawVelocity>0);
+  const before=control.yaw;
+  control.addMouseDelta(-300,0);step();
+  assert.ok(control.yaw>before,'a heavy sword must not reverse in one frame');
+  for(let i=0;i<70;i++)step();
+  assert.ok(control.yaw<before,'it should eventually follow the reversed target');
+  assert.ok(Math.abs(control.yaw)<=WEAPON_CONTROL.horizontalRange);
 });
 
-test('Bare skin does not retain invisible plate protection or armor damage',()=>{
-  const bare=new AnatomySystem({unarmored:true}),plate=new AnatomySystem();
-  const hit={weapon:WEAPONS.longsword,bodyPart:'torso',attackType:'left',relativeVelocity:5.5};
-  const exposed=bare.receiveHit(hit),protectedHit=plate.receiveHit(hit);
-  assert.equal(exposed.protection,0);assert.ok(exposed.magnitude>protectedHit.magnitude);
-  assert.equal(bare.parts.torso.armorCondition,100);
-  assert.ok(!bare.parts.torso.injuries.some(i=>i.type==='armorDamage'));
+test('Vertical, horizontal and diagonal input move the actual blade tip',()=>{
+  const {player,step}=yard();const c=player.weaponControl;c.setActive(true);
+  const initial=player.bladeWorld().tip.clone();
+  c.addMouseDelta(100,-100);for(let i=0;i<35;i++)step();
+  const diagonal=player.bladeWorld().tip.clone();
+  assert.ok(diagonal.x>initial.x+.4&&diagonal.y>initial.y+.25);
+  c.addMouseDelta(-200,200);for(let i=0;i<60;i++)step();
+  const reverse=player.bladeWorld().tip;
+  assert.ok(reverse.x<diagonal.x-.5&&reverse.y<diagonal.y-.4);
 });
 
-test('Left and right cuts travel in the direction named by the key',()=>{
-  for(const direction of ['left','right']){
-    const {player}=setup(direction);player.attack.time=player.attack.duration*.34;player.animate(0,0);
-    const first=player.bladeWorld().tip.x;
-    player.attack.time=player.attack.duration*.6;player.animate(0,0);
-    const delta=player.bladeWorld().tip.x-first;
-    assert.ok(direction==='left'?delta<-.5:delta>.5);
-  }
+test('A fast manual crossing injures more than a slow crossing of the same enemy',()=>{
+  const run=fast=>{
+    const d=yard();d.player.weaponControl.setActive(true);
+    for(let i=0;i<100;i++){
+      if(fast&&i===0)d.player.weaponControl.addMouseDelta(180,0);
+      if(!fast&&i<60)d.player.weaponControl.addMouseDelta(3,0);
+      d.step();
+    }
+    return d.events.find(event=>event.type==='hit')?.result;
+  };
+  const fast=run(true),slow=run(false);
+  assert.ok(fast&&slow);
+  assert.ok(fast.relativeVelocity>slow.relativeVelocity);
+  assert.ok(fast.magnitude>slow.magnitude*2);
+  assert.ok(fast.bodyPart in new AnatomySystem({unarmored:true}).parts);
 });
 
-test('A real hit briefly arrests the swing, pushes the body and reacts at the contact region',()=>{
-  const d=setup();d.contact();const hit=d.events[0];
-  assert.equal(hit?.type,'hit');assert.ok(d.player.attack.hitPause>0);
-  assert.ok(d.enemy.impactVelocity.length()>0);assert.equal(d.enemy.reaction.part,hit.result.bodyPart);
-  const time=d.player.attack.time;d.step();assert.equal(d.player.attack.time,time);
-  assert.ok(d.sounds.some(([sound])=>sound==='flesh'));
-  assert.ok(!d.sounds.some(([sound])=>sound==='armor'));
-  for(let i=0;i<120;i++)d.step();assert.equal(d.events.filter(e=>e.type==='hit').length,1);
+test('A crossed sword blocks the blade path without applying a body hit',()=>{
+  const d=yard(1.35,true),control=d.player.weaponControl;
+  control.setActive(true);control.addMouseDelta(180,0);
+  for(let i=0;i<90;i++)d.step();
+  assert.equal(d.events.filter(event=>event.type==='block').length,1);
+  assert.equal(d.events.filter(event=>event.type==='hit').length,0);
+  assert.equal(d.enemy.anatomy.lastHit,null);
+  assert.ok(control.yaw<0,'the weapon should stop at the opposing blade');
 });
 
-test('Weapon guard stops a strike with recoil and zero skin injury',()=>{
-  const d=setup();d.combat.time=1;d.combat.setBlock(d.enemy,true);d.enemy.blockStarted=-100;d.contact();
-  assert.equal(d.events[0]?.type,'block');assert.ok(d.player.attack.recovery);
-  assert.equal(d.enemy.anatomy.condition,100);assert.equal(d.enemy.wounds.length,0);
-  for(let i=0;i<90;i++)d.step();assert.equal(d.player.attack,null);
+test('A continuous fast sweep generates one contact event',()=>{
+  const d=yard();d.player.weaponControl.setActive(true);d.player.weaponControl.addMouseDelta(180,0);
+  for(let i=0;i<90;i++)d.step();
+  assert.equal(d.events.filter(event=>event.type==='hit').length,1);
 });
 
-test('Cuts leave oriented skin marks; blunt hits leave bruises without blood or sparks',()=>{
-  const cut=setup();cut.contact();
-  assert.ok(cut.enemy.wounds.length>0);
-  const mark=cut.enemy.wounds[0];assert.ok(mark.scale.y>mark.scale.x*2);
-  assert.ok(['cut','deepCut','hemorrhage'].includes(mark.userData.injuryType));
-  const blunt=setup('left','mace');blunt.contact();
-  assert.equal(blunt.events[0]?.result.damageType,'blunt');
-  assert.equal(blunt.bursts.length,0);
-  assert.ok(blunt.enemy.wounds[0].scale.x>.5);
+test('Blade sweeps detect crossing segments between frames',()=>{
+  const a={hilt:new THREE.Vector3(-1,0,0),tip:new THREE.Vector3(-1,1,0)};
+  const b={hilt:new THREE.Vector3(1,0,0),tip:new THREE.Vector3(1,1,0)};
+  const fixed={hilt:new THREE.Vector3(0,.2,-.5),tip:new THREE.Vector3(0,.8,.5)};
+  assert.ok(sweepWeapons(a,b,fixed,fixed));
 });
 
-test('Reset clears directional recoil and knockback as well as wounds',()=>{
-  const d=setup();d.contact();d.enemy.reset();
-  assert.equal(d.enemy.reaction,null);assert.equal(d.enemy.impactVelocity.length(),0);assert.equal(d.enemy.wounds.length,0);
+test('Slow contact causes negligible trauma and flat sword contact loses cutting power',()=>{
+  const bare=new AnatomySystem({unarmored:true});
+  const base={weapon:WEAPONS.longsword,bodyPart:'torso',attackType:'manual',relativeVelocity:.5};
+  assert.equal(bare.receiveHit(base).magnitude,0);
+  const clean=new AnatomySystem({unarmored:true}).receiveHit({...base,relativeVelocity:7,edgeAlignment:1});
+  const flat=new AnatomySystem({unarmored:true}).receiveHit({...base,relativeVelocity:7,edgeAlignment:0});
+  assert.equal(clean.damageType,'cut');assert.equal(flat.damageType,'blunt');
+  assert.ok(clean.magnitude>flat.magnitude);
 });

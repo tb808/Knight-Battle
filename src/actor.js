@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { AnatomySystem } from './anatomy.js';
 import { BALANCE, BODY_PARTS, WEAPONS } from './config.js';
 import { box, mesh, cylinder, mat, weaponModel } from './geometry.js';
+import { WeaponControl } from './weapon-control.js';
+import { WEAPON_CONTROL, WEAPON_DYNAMICS } from './config.js';
 
 export class Character {
   constructor(scene, { name, player = false, color = '#75372e', position = [0, 0, 0] }) {
@@ -10,12 +12,13 @@ export class Character {
     this.root = new THREE.Group(); this.root.position.set(...position); scene.add(this.root);
     this.rig = new THREE.Group(); this.root.add(this.rig);
     this.stamina = 100; this.guard = 100; this.weaponKey = 'longsword';
-    this.attack = null; this.blocking = false; this.blockStarted = -100; this.stagger = 0;
-    this.dodge = 0; this.dodgeVector = new THREE.Vector3(); this.cooldown = 0;
+    this.blocking = false; this.stagger = 0;
+    this.dodge = 0; this.dodgeVector = new THREE.Vector3();
     this.moving = 0; this.step = 0; this.collapse = 0; this.halfSword = false; this.stance = 'Balanced';
     this.parts = {}; this.wounds = []; this.hitFlash = 0;
     this.impactVelocity = new THREE.Vector3(); this.frameVelocity = new THREE.Vector3(); this.reaction = null;
     this.build(color);
+    this.weaponControl = new WeaponControl(this);
     this.equip('longsword');
     this.blade = { hilt: new THREE.Vector3(), tip: new THREE.Vector3() };
     this.animate(0, 0);
@@ -117,10 +120,11 @@ export class Character {
   }
   reset(position) {
     this.impactVelocity.set(0,0,0);this.frameVelocity.set(0,0,0);this.reaction=null;this.hitFlash=0;
-    this.anatomy.reset(); this.stamina=100; this.guard=100; this.attack=null; this.blocking=false; this.cooldown=0; this.stagger=0; this.collapse=0; this.dodge=0;
+    this.anatomy.reset(); this.stamina=100; this.guard=100; this.blocking=false; this.stagger=0; this.collapse=0; this.dodge=0;
     for(const mark of this.wounds){mark.removeFromParent();mark.geometry.dispose();mark.material.dispose();} this.wounds=[];
     for(const part of Object.values(this.parts))part.wounds=0;
     this.equip(this.weaponKey);
+    this.weaponControl?.reset();
     if(position)this.position.set(...position);
     this.animate(0,0);
   }
@@ -144,56 +148,38 @@ export class Character {
     this.rig.position.y=Math.sin(time*2)*.012+Math.abs(Math.sin(this.step))*this.moving*.008;
     this.rig.rotation.z=(modifiers.limpLeft-modifiers.limpRight)*Math.sin(this.step)*.16 + (this.hitFlash>0?Math.sin(this.hitFlash*30)*.035:0);
     const hilt=new THREE.Vector3(.28,1.13,-.34),tip=new THREE.Vector3(.5,1.95,-1.12);
-    const idleHilt=hilt.clone(),idleTip=tip.clone();
-    if(this.blocking){hilt.set(.17,1.36,-.44);tip.set(-.2,2.05,-.64);}
-    if(this.attack){
-      const a=this.attack, p=Math.min(1,a.time/a.duration);
-      const swing=THREE.MathUtils.smoothstep(p,.22,.72);
-      if(a.direction==='thrust'){
-        const extension=Math.sin(swing*Math.PI);hilt.set(.16,1.32,-.15-extension*.58);tip.set(.09,a.aimHeight||1.32,-2.1);
-      }else if(a.direction==='overhead'){
-        const angle=-.5+swing*2.5;hilt.set(.1,1.45,-.22);tip.set(.05,1.4+Math.cos(angle)*1.25,-.4-Math.sin(angle)*1.5);
-      }else if(a.direction==='kick'){
-        this.parts.rightThigh.node.rotation.x=-Math.sin(p*Math.PI)*1.0;
-        this.parts.rightLowerLeg.node.position.set(.2,.55,-Math.sin(p*Math.PI)*.8);
-        this.parts.rightFoot.node.position.set(.2,.52,-Math.sin(p*Math.PI)*1.04);
-      }else{
-        const sign=a.direction==='left'?-1:1,angle=sign*(-1.28+swing*2.56);
-        const height=a.direction==='low'?.46:1.25;
-        hilt.set(.15,height,-.2);tip.set(Math.sin(angle)*1.8,height+(a.direction==='low'?0:Math.cos(angle)*.05),-.2-Math.cos(angle)*1.8);
-      }
-      const blend=p<.22?THREE.MathUtils.smoothstep(p,0,.2):p>.76?1-THREE.MathUtils.smoothstep(p,.76,1):1;
-      hilt.lerpVectors(idleHilt,hilt.clone(),blend);tip.lerpVectors(idleTip,tip.clone(),blend);
-      if(a.recovery){
-        const r=a.recovery,weight=THREE.MathUtils.smoothstep(r.time,0,.26);
-        hilt.lerpVectors(r.hilt,idleHilt,weight);
-        tip.copy(r.hilt).addScaledVector(r.direction,1.8).lerp(idleTip,weight);
-      }
-    }
-    hilt.x+=Math.sin(time*11)*.06*(1-modifiers.coordination);tip.x+=Math.sin(time*8.3)*.16*(1-modifiers.coordination);
+    const control=this.weaponControl, direction=control.direction();
+    hilt.set(.27+Math.sin(control.yaw)*.12,1.27+Math.sin(control.pitch)*.08,-.31-control.reach);
+    tip.copy(hilt).addScaledVector(direction,WEAPONS[this.weaponKey].reach-(this.halfSword?.35:0));
+    this.parts.torso.node.rotation.y+=control.yaw*control.config.torsoRotationInfluence;
+    this.parts.torso.node.rotation.x-=control.pitch*.09;
     this.weaponHolder.position.copy(hilt);
     const bladeDirection=tip.sub(hilt).normalize();
     this.weaponHolder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),bladeDirection);
     this.weapon.position.y=this.halfSword?-.35:0;
-    // Place both arm segments between shoulder, elbow and the actual grip.
-    const shoulder=new THREE.Vector3(.38,1.51,0);
-    const elbow=shoulder.clone().lerp(hilt,.5).add(new THREE.Vector3(.14,-.15,.08));
-    this.parts.rightHand.node.position.copy(hilt);
-    for(const [id,from,to] of [['rightUpperArm',shoulder,elbow],['rightForearm',elbow,hilt]]){
-      const node=this.parts[id].node;node.position.copy(from).lerp(to,.5);
-      node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
-    }
-    const armDrop=1-modifiers.attack;this.parts.rightUpperArm.node.rotation.z-=armDrop*.22;
-    if(this.halfSword||this.blocking||['longsword','spear','axe'].includes(this.weaponKey)){
-      const leftGrip=hilt.clone().addScaledVector(bladeDirection,this.halfSword?.4:-.12);
-      this.parts.leftHand.node.position.copy(leftGrip);
-      const leftShoulder=new THREE.Vector3(-.38,1.51,0),leftElbow=leftShoulder.clone().lerp(leftGrip,.5).add(new THREE.Vector3(-.1,-.14,.05));
-      for(const [id,from,to]of [['leftUpperArm',leftShoulder,leftElbow],['leftForearm',leftElbow,leftGrip]]){
-        this.parts[id].node.position.copy(from).lerp(to,.5);
-        this.parts[id].node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
+    // Two-bone arm IK: a single weapon grip drives each arm, with fixed segment lengths.
+    const poseArm=(side,grip)=>{
+      const left=side==='left',sign=left?-1:1;
+      const shoulder=new THREE.Vector3(sign*.38,1.51,0);
+      const offset=grip.clone().sub(shoulder),distance=Math.max(.001,offset.length());
+      const direction=offset.clone().divideScalar(distance),upper=.43,lower=.44;
+      const along=THREE.MathUtils.clamp((upper*upper-lower*lower+distance*distance)/(2*distance),-upper,upper);
+      const bend=new THREE.Vector3(sign*.8,-.7,.45).addScaledVector(direction,-new THREE.Vector3(sign*.8,-.7,.45).dot(direction)).normalize();
+      const elbow=shoulder.clone().addScaledVector(direction,along).addScaledVector(bend,Math.sqrt(Math.max(0,upper*upper-along*along))*(this.weaponControl?.config.ikStrength??WEAPON_CONTROL.ikStrength));
+      this.parts[`${side}Hand`].node.position.copy(grip);
+      for(const [id,from,to] of [[`${side}UpperArm`,shoulder,elbow],[`${side}Forearm`,elbow,grip]]){
+        const node=this.parts[id].node;node.position.copy(from).lerp(to,.5);
+        node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
       }
+    };
+    poseArm('right',hilt);
+    const armDrop=1-modifiers.attack;this.parts.rightUpperArm.node.rotation.z-=armDrop*.22;
+    if(this.halfSword||['longsword','spear','axe'].includes(this.weaponKey)){
+      const leftGrip=hilt.clone().addScaledVector(bladeDirection,this.halfSword?.4:(WEAPON_DYNAMICS[this.weaponKey].secondaryGrip??-.12));
+      poseArm('left',leftGrip);
     }
-    this.rig.rotation.y=0;
+    this.rig.rotation.y=this.weaponControl?this.weaponControl.yaw*this.weaponControl.config.torsoRotationInfluence:0;
+    if(this.weaponControl)this.rig.rotation.z-=this.weaponControl.yawVelocity*WEAPONS[this.weaponKey].mass*.012;
     if(this.reaction){
       this.reaction.time+=dt;
       const r=this.reaction,t=r.time/BALANCE.impact.recoilDuration;

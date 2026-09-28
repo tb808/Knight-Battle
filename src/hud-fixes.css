@@ -11,3 +11,14 @@
 .controls-hint kbd b{font:inherit;padding:0 2px}
 .dir::after{display:none}
 .dir>span{color:#f0dfb6;transform:rotate(-45deg);font:600 12px 'Inter',sans-serif}
+.manual-control{position:absolute;bottom:75px;left:50%;transform:translateX(-50%);width:230px;padding:12px 18px;text-align:center;background:#17211ad9;border:1px solid #c9b58288;box-shadow:0 8px 25px #0008;text-shadow:0 1px 4px #000}
+.manual-control span,.manual-control small{display:block;font:8px 'Inter',sans-serif;letter-spacing:1.4px;color:#c8b891}
+.manual-control strong{display:block;margin:7px 0;font:18px 'Cormorant Garamond',Georgia,serif;color:#f0e1b8}
+#weapon-debug{position:absolute;left:50%;top:35%;transform:translateX(-50%);width:215px;padding:13px;background:#121d1aeb;border:1px solid #e4c98599;color:#e9dfc6;font:9px 'Inter',sans-serif;z-index:2}
+#weapon-debug strong{font-size:10px;letter-spacing:1px;color:#e4c985}
+#weapon-debug dl{display:grid;grid-template-columns:1fr auto;gap:5px;margin:10px 0 0}
+#weapon-debug dt{color:#aab7a6}#weapon-debug dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+#weapon-tuning{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0}
+#weapon-tuning label{display:flex;flex-direction:column;gap:3px;font:8px 'Inter',sans-serif;color:#abb7a5}
+#weapon-tuning input{width:100%;padding:4px;background:#30372c;border:1px solid #c8b27444;color:#e9dfc5;font:10px 'Inter',sans-serif}
+@media(max-width:900px){.manual-control{left:50%;bottom:50px;width:180px}.manual-control strong{font-size:14px}}
