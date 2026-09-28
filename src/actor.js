@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AnatomySystem } from './anatomy.js';
 import { BALANCE, BODY_PARTS, WEAPONS } from './config.js';
 import { box, mesh, cylinder, beam, mat, shield, weaponModel } from './geometry.js';
+import { WeaponMotion } from './weapon-motion.js';
 
 export class Character {
   constructor(scene, { name, player = false, color = '#75372e', position = [0, 0, 0] }) {
@@ -14,6 +15,7 @@ export class Character {
     this.dodge = 0; this.dodgeVector = new THREE.Vector3(); this.cooldown = 0;
     this.moving = 0; this.step = 0; this.collapse = 0; this.halfSword = false; this.stance = 'Balanced';
     this.parts = {}; this.wounds = []; this.hitFlash = 0;
+    this.weaponMotion = player ? new WeaponMotion() : null;
     this.build(color);
     this.equip('longsword');
     this.blade = { hilt: new THREE.Vector3(), tip: new THREE.Vector3() };
@@ -82,6 +84,7 @@ export class Character {
     if (!WEAPONS[key]) return;
     if (this.weapon) { this.weaponHolder.remove(this.weapon); this.weapon.traverse(o => { if(o.isMesh){o.geometry.dispose(); o.material.dispose();} }); }
     this.weaponKey = key; this.weapon = weaponModel(key,this.weaponHolder);
+    this.weaponMotion?.reset();
   }
   face(target, dt = 1) {
     const angle = Math.atan2(this.position.x - target.x, this.position.z - target.z);
@@ -151,6 +154,11 @@ export class Character {
     this.rig.rotation.z=(modifiers.limpLeft-modifiers.limpRight)*Math.sin(this.step)*.16 + (this.hitFlash>0?Math.sin(this.hitFlash*30)*.035:0);
     this.cape.rotation.x=Math.sin(time*3+this.step)*(.015+this.moving*.02);
     const hilt=new THREE.Vector3(.46,1.0,-.27),tip=this.isPlayer?new THREE.Vector3(1.7,.69,-.75):new THREE.Vector3(.4,2.2,-.95);
+    if(this.weaponMotion){
+      const {yaw,pitch}=this.weaponMotion;
+      hilt.set(.14+Math.sin(yaw)*.18,1.3+Math.sin(pitch)*.12,-.3);
+      tip.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(1.8).add(hilt);
+    }
     const idleHilt=hilt.clone(),idleTip=tip.clone();
     if(this.blocking){hilt.set(.17,1.36,-.44);tip.set(-.2,2.05,-.64);}
     if(this.attack){
@@ -177,9 +185,15 @@ export class Character {
     const bladeDirection=tip.sub(hilt).normalize();
     this.weaponHolder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),bladeDirection);
     this.weapon.position.y=this.halfSword?-.35:0;
-    this.parts.rightHand.node.position.copy(hilt); this.parts.rightForearm.node.position.lerp(hilt,.52);
-    this.parts.rightForearm.node.rotation.x=-.65; this.parts.rightUpperArm.node.rotation.x=-.25;
-    const armDrop=1-modifiers.attack;this.parts.rightUpperArm.node.rotation.z=-armDrop*.22;
+    // Place both arm segments between shoulder, elbow and the actual grip.
+    const shoulder=new THREE.Vector3(.38,1.51,0);
+    const elbow=shoulder.clone().lerp(hilt,.5).add(new THREE.Vector3(.14,-.15,.08));
+    this.parts.rightHand.node.position.copy(hilt);
+    for(const [id,from,to] of [['rightUpperArm',shoulder,elbow],['rightForearm',elbow,hilt]]){
+      const node=this.parts[id].node;node.position.copy(from).lerp(to,.5);
+      node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
+    }
+    const armDrop=1-modifiers.attack;this.parts.rightUpperArm.node.rotation.z-=armDrop*.22;
     this.shield.position.set(this.blocking?-.12:-.54,this.blocking?1.38:1.09,this.blocking?-.55:-.08);
     this.shield.rotation.y=this.blocking?Math.PI:Math.PI+.35; this.shield.rotation.z=this.blocking?.06:-.18;
     this.shield.visible=!this.halfSword;

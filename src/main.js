@@ -31,14 +31,21 @@ class Game {
   }
   start(){
     this.started=true;this.paused=false;document.querySelector('#pause-simulation').checked=false;document.querySelector('#pause-badge').classList.add('hidden');this.effects.unlock();document.querySelector('#start-prompt').classList.add('hidden');
-    this.capturePointer();this.ui.notify('Keep your guard.','Aim for exposed limbs. Every injury matters.');
+    this.capturePointer();this.ui.notify('Your mouse guides the blade.','Hold left mouse and sweep to strike · Hold C to look around');
   }
   capturePointer(){
     if(this.ui.debugOpen||this.menuOpen||this.ended)return;
-    try{const request=this.canvas.requestPointerLock?.();request?.catch(()=>{document.querySelector('#pointer-hint').textContent='DRAG THE ARENA TO ROTATE · SCROLL TO ZOOM';});}catch{document.querySelector('#pointer-hint').textContent='DRAG THE ARENA TO ROTATE · SCROLL TO ZOOM';}
+    try{const request=this.canvas.requestPointerLock?.();request?.catch(()=>{document.querySelector('#pointer-hint').textContent='HOLD LEFT MOUSE + DRAG TO SWING · C + DRAG TO LOOK';});}catch{document.querySelector('#pointer-hint').textContent='HOLD LEFT MOUSE + DRAG TO SWING · C + DRAG TO LOOK';}
+  }
+  releaseInput(){this.keys.clear();this.swingHeld=false;this.combat.setSwing(this.player,false);this.combat.setBlock(this.player,false);this.dragging=false;}
+  readyWeapon(direction){
+    this.direction=direction;
+    if(!this.player.attack&&!this.player.blocking)this.player.weaponMotion.ready(direction);
+    this.ui.updateDirection();
   }
   equip(key){if(!this.player.attack){this.player.equip(key);if(!['longsword','arming'].includes(key))this.player.halfSword=false;this.ui.notify(WEAPONS[key].name,`${WEAPONS[key].reach.toFixed(2)} m reach · ${WEAPONS[key].type==='blunt'?'Blunt trauma':WEAPONS[key].type==='pierce'?'Penetrating strikes':'Cut & thrust'}`);}}
   reset(){
+    this.releaseInput();
     this.player.reset([-.45,0,2.55]);this.enemy.reset([.2,0,-.45]);this.player.root.rotation.y=0;this.enemy.root.rotation.y=Math.PI;this.ai.attackTimer=2.2;this.effects.reset();this.elapsed=0;this.ended=false;this.resultTimer=0;this.keys.clear();this.locked=true;this.cameraYaw=0;
     document.querySelector('#result').classList.add('hidden');document.querySelector('#event-log').innerHTML='';this.ui.notify('A new lesson','Steel yourself.');this.ui.update(0,true);
     this.updateCamera(1);
@@ -49,17 +56,18 @@ class Game {
     window.addEventListener('keydown',e=>{
       if(this.ui.binding){e.preventDefault();this.controls[this.ui.binding]=e.code;document.querySelector(`[data-bind="${this.ui.binding}"]`).textContent=e.code.replace('Key','').replace('Arrow','').replace('Left','');this.ui.binding=null;try{localStorage.setItem('iron-sinew-controls',JSON.stringify(this.controls));}catch{}this.updateKeyHints();return;}
       if(['INPUT','SELECT'].includes(e.target.tagName))return;
-      if(e.code==='Escape'){this.keys.clear();this.combat.setBlock(this.player,false);return;}
+      if(e.code==='Escape'){this.releaseInput();return;}
       if(Object.values(this.controls).includes(e.code)||e.code.startsWith('Digit'))e.preventDefault();
       if(e.repeat)return;this.keys.add(e.code);
       if(e.code===this.controls.debug){this.ui.toggleDebug();return;}
       if(this.menuOpen||this.ended)return;
+      if(e.code===this.controls.freeLook)this.combat.setSwing(this.player,false);
       if(e.code==='Enter'&&!this.started){this.start();return;}
-      if(e.code===this.controls.lock){this.locked=!this.locked;this.ui.notify(this.locked?'Target locked':'Free camera',this.locked?'Training knight':'Move the mouse to look around');}
+      if(e.code===this.controls.lock){this.locked=!this.locked;this.ui.notify(this.locked?'Target locked':'Free camera',this.locked?'Training knight':'Hold C and move the mouse to look around');}
       if(e.code===this.controls.stance){const stances=['Balanced','Aggressive','Defensive'];this.player.stance=stances[(stances.indexOf(this.player.stance)+1)%3];this.ui.notify(`${this.player.stance} stance`,this.player.stance==='Aggressive'?'More impact · higher stamina cost':this.player.stance==='Defensive'?'Stronger guard · lighter strikes':'Steady guard · measured strikes');}
-      if(e.code===this.controls.halfSword){if(['longsword','arming'].includes(this.player.weaponKey)){this.player.halfSword=!this.player.halfSword;this.ui.notify(this.player.halfSword?'Half-sword':'Full grip',this.player.halfSword?'Precision thrusts · shortened grip':'Full reach restored');}else this.ui.notify('Sword stance','Equip a longsword or arming sword to half-sword.');}
+      if(e.code===this.controls.halfSword){if(['longsword','arming'].includes(this.player.weaponKey)){this.player.weaponMotion.stop();this.player.halfSword=!this.player.halfSword;this.ui.notify(this.player.halfSword?'Half-sword':'Full grip',this.player.halfSword?'Precision thrusts · shortened grip':'Full reach restored');}else this.ui.notify('Sword stance','Equip a longsword or arming sword to half-sword.');}
       const weapons=['longsword','dagger','axe','spear','mace','arming'];if(/^Digit[1-6]$/.test(e.code))this.equip(weapons[Number(e.code.slice(-1))-1]);
-      for(const [action,direction]of [['overhead','overhead'],['low','low'],['leftSlash','left'],['rightSlash','right']])if(e.code===this.controls[action]){this.direction=direction;this.ui.updateDirection();}
+      for(const [action,direction]of [['overhead','overhead'],['low','low'],['leftSlash','left'],['rightSlash','right']])if(e.code===this.controls[action])this.readyWeapon(direction);
       if(this.started&&!this.paused){
         if(e.code===this.controls.thrust)this.combat.startAttack(this.player,'thrust');
         if(e.code===this.controls.kick)this.combat.startAttack(this.player,'kick');
@@ -67,23 +75,27 @@ class Game {
       }
     });
     window.addEventListener('keyup',e=>this.keys.delete(e.code));
-    window.addEventListener('blur',()=>{this.keys.clear();this.combat.setBlock(this.player,false);this.dragging=false;});
-    document.addEventListener('visibilitychange',()=>{if(document.hidden){this.keys.clear();this.combat.setBlock(this.player,false);}});
+    window.addEventListener('blur',()=>this.releaseInput());
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)this.releaseInput();});
     this.canvas.addEventListener('contextmenu',e=>e.preventDefault());
     this.canvas.addEventListener('mousedown',e=>{
       if(!this.started){this.start();return;}if(this.ended||this.paused||this.menuOpen)return;
       this.effects.unlock();this.dragging=true;
-      if(e.button===0){if(document.pointerLockElement!==this.canvas&&!this.ui.debugOpen)this.capturePointer();this.combat.startAttack(this.player,this.player.halfSword?'thrust':this.direction);}
+      if(e.button===0){this.swingHeld=true;if(document.pointerLockElement!==this.canvas&&!this.ui.debugOpen)this.capturePointer();if(!this.keys.has(this.controls.freeLook))this.combat.setSwing(this.player,true);}
       if(e.button===2)this.combat.setBlock(this.player,true);
       if(e.button===1){e.preventDefault();this.locked=!this.locked;}
     });
-    window.addEventListener('mouseup',e=>{if(e.button===2)this.combat.setBlock(this.player,false);this.dragging=false;});
-    document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==this.canvas){this.keys.clear();this.combat.setBlock(this.player,false);}document.querySelector('#pointer-hint').textContent=document.pointerLockElement===this.canvas?'MOUSE TO AIM · SCROLL TO ZOOM · ESC TO RELEASE':'CLICK THE ARENA TO CONTROL THE CAMERA · ESC TO RELEASE';});
+    window.addEventListener('mouseup',e=>{if(e.button===0){this.swingHeld=false;this.combat.setSwing(this.player,false);}if(e.button===2)this.combat.setBlock(this.player,false);this.dragging=!!e.buttons;});
+    document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==this.canvas)this.releaseInput();document.querySelector('#pointer-hint').textContent=document.pointerLockElement===this.canvas?'MOUSE GUIDES BLADE · HOLD LEFT MOUSE TO STRIKE · HOLD C TO LOOK · ESC TO RELEASE':'CLICK THE ARENA · HOLD LEFT MOUSE + DRAG TO SWING';});
     window.addEventListener('mousemove',e=>{
-      if((document.pointerLockElement!==this.canvas&&!this.dragging)||this.menuOpen||this.ended)return;
+      if((document.pointerLockElement!==this.canvas&&!this.dragging)||!this.started||this.paused||this.menuOpen||this.ended)return;
       const dx=e.movementX||0,dy=e.movementY||0;
-      this.cameraYaw-=dx*.002;this.cameraPitch=THREE.MathUtils.clamp(this.cameraPitch+dy*.0016,-.08,.65);
-      if(!this.player.attack&&Math.abs(dx)+Math.abs(dy)>5){this.direction=Math.abs(dy)>Math.abs(dx)?dy>0?'low':'overhead':dx>0?'right':'left';this.ui.updateDirection();}
+      if(this.keys.has(this.controls.freeLook)){
+        this.cameraYaw-=dx*.002;this.cameraPitch=THREE.MathUtils.clamp(this.cameraPitch+dy*.0016,-.08,.65);
+      }else if(!this.player.attack&&!this.player.blocking&&this.player.stagger<=0&&this.player.dodge<=0){
+        this.player.weaponMotion.aim(dx,dy);
+        if(Math.abs(dx)+Math.abs(dy)>2){this.direction=Math.abs(dy)>Math.abs(dx)?dy>0?'low':'overhead':dx>0?'right':'left';this.ui.updateDirection();}
+      }
     });
     this.canvas.addEventListener('wheel',e=>{e.preventDefault();this.cameraDistance=THREE.MathUtils.clamp(this.cameraDistance+e.deltaY*.002,2.5,6);},{passive:false});
     this.updateKeyHints();
@@ -107,12 +119,13 @@ class Game {
       this.elapsed+=dt;
       for(const actor of this.actors)this.combat.tick(actor,dt);
       const p=this.player,mod=p.anatomy.modifiers;
+      if(this.swingHeld&&!this.keys.has(this.controls.freeLook)&&p.stamina>=2)this.combat.setSwing(p,true);
       let direction=this.inputDirection();
       if(p.stagger>0)direction.set(0,0,0);
       if(p.dodge>0)this.move(p,p.dodgeVector,dt,BALANCE.movement.dodgeSpeed*mod.movement);
-      else this.move(p,direction,dt,BALANCE.movement.speed*mod.movement*(p.blocking?.48:p.attack?.36:1));
+      else this.move(p,direction,dt,BALANCE.movement.speed*mod.movement*(p.blocking?.48:p.attack?.36:p.weaponMotion.held?.72:1));
       if(this.locked&&this.enemy.alive)p.face(this.enemy.position,dt);
-      else if(direction.lengthSq()>.1)p.face(p.position.clone().add(direction),dt);
+      else p.face(p.position.clone().add(new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0),this.cameraYaw)),dt);
       this.ai.update(dt,p,this.combat,this.move.bind(this));
       // Character separation is movement collision only; damage always uses the blade sweep.
       const difference=this.enemy.position.clone().sub(p.position);difference.y=0;const distance=difference.length();
@@ -120,7 +133,7 @@ class Game {
       for(const actor of this.actors)actor.animate(dt,this.time);
       for(const actor of this.actors)this.combat.resolve(actor,this.actors,dt);
       if(p.moving>.1){this.footstep+=dt*p.moving;if(this.footstep>.95){this.footstep=0;this.effects.sound('step');}}
-      if(this.actors.some(a=>!a.alive)){this.ended=true;this.resultTimer=0;this.keys.clear();}
+      if(this.actors.some(a=>!a.alive)){this.ended=true;this.resultTimer=0;this.releaseInput();}
     }else if(this.ended){
       this.resultTimer+=dt;for(const actor of this.actors)actor.animate(dt,this.time);
       if(this.resultTimer>=1.5&&this.resultTimer-dt<1.5)this.ui.showResult();
@@ -130,7 +143,7 @@ class Game {
   }
   updateCamera(dt){
     const p=this.player;
-    if(this.locked&&this.enemy.alive){
+    if(this.locked&&this.enemy.alive&&!this.keys.has(this.controls.freeLook)){
       const targetYaw=Math.atan2(p.position.x-this.enemy.position.x,p.position.z-this.enemy.position.z);
       const delta=Math.atan2(Math.sin(targetYaw-this.cameraYaw),Math.cos(targetYaw-this.cameraYaw));this.cameraYaw+=delta*Math.min(1,dt*3.7);
     }
@@ -152,7 +165,7 @@ class Game {
     this.camera.position.x=THREE.MathUtils.clamp(this.camera.position.x,-10.55,10.55);this.camera.position.z=THREE.MathUtils.clamp(this.camera.position.z,-9.7,10);
     this.shake=Math.max(0,this.shake-dt*.3);this.camera.position.x+=Math.sin(this.time*91)*this.shake;this.camera.position.y+=Math.cos(this.time*77)*this.shake*.6;
     const look=pivot.clone().add(new THREE.Vector3(0,-.04,-3).applyQuaternion(rotation));
-    if(this.locked&&this.enemy.alive){look.lerp(this.enemy.position.clone().add(new THREE.Vector3(0,1.2,0)),.65);}
+    if(this.locked&&this.enemy.alive&&!this.keys.has(this.controls.freeLook)){look.lerp(this.enemy.position.clone().add(new THREE.Vector3(0,1.2,0)),.65);}
     this.camera.lookAt(look);
     const enemyPoint=this.enemy.position.clone().add(new THREE.Vector3(0,2.3,0)).project(this.camera),marker=document.querySelector('#target-marker');
     marker.style.left=`${(enemyPoint.x*.5+.5)*innerWidth}px`;marker.style.top=`${(-enemyPoint.y*.5+.5)*innerHeight}px`;marker.style.display=this.enemy.alive&&enemyPoint.z<1&&Math.abs(enemyPoint.x)<1?'flex':'none';marker.style.opacity=this.locked?'1':'.35';

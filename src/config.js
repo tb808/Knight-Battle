@@ -3,6 +3,7 @@ export const BALANCE = {
   blood: { capacity: 100, weak: 76, severe: 49, critical: 29, collapse: 17, clotPerSecond: .002 },
   injury: { painMultiplier: 1, fractureThreshold: 23, severeFractureThreshold: 40, arteryThreshold: 22 },
   combat: { parryWindow: .19, guardRecovery: 10, staminaRecovery: 14, dodgeCost: 22, kickCost: 18 },
+  weaponMotion: { sensitivity: .006, yawLimit: 1.45, pitchMin: -.95, pitchMax: 1.25, response: 15, acceleration: 65, maxSpeed: 8, minimumSpeed: 1.15, minimumTravel: .12, rearmTravel: .38, contactCooldown: .2 },
   movement: { speed: 2.5, sprint: 3.7, dodgeSpeed: 7.5, arenaRadius: 10.5 },
   performance: { particles: 180, groundMarks: 90, maxWoundsPerPart: 3, pixelRatio: 1.6 },
 };
@@ -56,6 +57,7 @@ export const INJURIES = {
 export const DEFAULT_CONTROLS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', dodge: 'ShiftLeft',
   kick: 'KeyE', stance: 'KeyQ', halfSword: 'KeyR', lock: 'AltLeft', thrust: 'Space',
+  freeLook: 'KeyC',
   overhead: 'ArrowUp', low: 'ArrowDown', leftSlash: 'ArrowLeft', rightSlash: 'ArrowRight', debug: 'F2',
 };
 

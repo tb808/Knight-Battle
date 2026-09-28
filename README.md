@@ -24,9 +24,10 @@ node 'C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js' install --cache .
 | Input | Action |
 | --- | --- |
 | WASD | Move relative to the camera |
-| Mouse | Rotate camera and choose attack direction |
-| Left mouse | Attack in the selected direction |
-| Arrow keys | Select left / right / overhead / low strike |
+| Mouse | Guide the weapon freely: sideways, vertically or diagonally |
+| Left mouse, held + mouse movement | Swing; wind up and sweep through the opponent, reverse for a return cut |
+| C, held + mouse | Look around; target lock resumes when released |
+| Arrow keys | Move the weapon to a left / right / overhead / low ready position |
 | Space | Thrust |
 | Right mouse, held | Guard; raise just before contact to parry |
 | E | Kick; disrupts guard on contact |
@@ -41,6 +42,8 @@ node 'C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js' install --cache .
 | Escape | Release the mouse |
 
 The gear button opens the field manual and editable keyboard bindings, saved in local storage. Mouse buttons are fixed. Clicking the weapon slots also equips weapons. The **YOU ⇄** button switches the injury display between the player and opponent. The circular-arrow button restarts a duel.
+
+The player's cuts follow continuous mouse-driven weapon motion instead of canned attack animations. The hollow dot shows the requested weapon position; the solid dot follows the blade, and the small meter shows swing speed. Heavy weapons accelerate more slowly. Arm injuries and exhaustion weaken control. Holding left mouse engages the weapon; a click or a stationary blade causes no damage. Release it to recover stamina. If pointer lock is unavailable, hold left mouse and drag across the arena to swing, or hold C while dragging to look around. Space thrusts and E kicks remain timed actions.
 
 ## Injury simulation
 
@@ -70,6 +73,7 @@ Edit **src/config.js** to tune weapons, material resistance, blood thresholds, i
 | `src/anatomy.js` | Shared regional damage, blood, pain, function, consciousness |
 | `src/collision.js` | Pure segment/sphere and swept blade collision |
 | `src/combat.js` | Attack lifecycle, guard, parry, stamina, dodge, enemy decisions |
+| `src/weapon-motion.js` | Mouse-guided blade motion, inertia, swing speed, contact and return strokes |
 | `src/actor.js` | Procedural knight, animated damage zones, visible injury surfaces |
 | `src/effects.js` | Bounded blood/sparks/ground marks and synthesized placeholder audio |
 | `src/environment.js` | Separate procedural arena assets, props, background, lights |
@@ -85,6 +89,8 @@ npm run build
 ```
 
 The Node tests cover regional isolation, armor versus weapons, fractures and limb function, bleeding time steps/collapse, resets, swept collision, animated strike directions, range misses, held guards, timed parries, and spear versus dagger reach.
+
+The weapon-motion tests also verify continuous diagonal control, stationary/slow blade safety, actual mouse-driven hits, return cuts, low cuts, guard/parry contacts, weapon weight, arm injuries, input cancellation and update-rate stability.
 
 `tests/browser-smoke.playwright.js` and `tests/browser-ai.playwright.js` are Playwright CLI `run-code --filename` scenarios. They verify the live UI, input, lab, mesh wounds, movement, blood loss, duel result, enemy attacks, camera bounds, and a smaller viewport. Screenshots are written under `output/playwright/`. `window.__IRON_SINEW__` exposes the same live game instance for reproducible development checks.
 
