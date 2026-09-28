@@ -1,0 +1,67 @@
+async (page) => {
+  const failures=[];
+  const errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.bringToFront();
+  await page.getByRole('button',{name:'Enter the yard →'}).click();
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{const g=window.__IRON_SINEW__;g.ai.passive=true;g.paused=true;});
+  await page.keyboard.press('Digit2');
+  const weapon=await page.evaluate(()=>window.__IRON_SINEW__.player.weaponKey);
+  if(weapon!=='dagger')failures.push('Keyboard weapon equip failed');
+  await page.keyboard.press('Digit1');
+  await page.keyboard.press('ArrowDown');
+  if(await page.evaluate(()=>window.__IRON_SINEW__.direction)!=='low')failures.push('Directional input failed');
+  await page.keyboard.press('KeyQ');
+  if(await page.evaluate(()=>window.__IRON_SINEW__.player.stance)!=='Aggressive')failures.push('Stance input failed');
+  await page.keyboard.press('F2');
+  await page.locator('#debug-target').selectOption('player');
+  await page.locator('#debug-part').selectOption('leftForearm');
+  await page.locator('#debug-injury').selectOption('deepCut');
+  await page.getByRole('button',{name:'Apply injury',exact:true}).click();
+  const injury=await page.evaluate(()=>{
+    const g=window.__IRON_SINEW__,a=g.player.anatomy;
+    return {bleeding:a.bleeding,wounds:g.player.wounds.length,label:document.querySelector('[data-group="leftArm"] span').textContent,fill:document.querySelector('[data-part="leftForearm"]').style.fill};
+  });
+  if(injury.bleeding<=0||injury.wounds===0||injury.label!=='Deep cut')failures.push('Player wound / HUD integration failed');
+  await page.getByRole('button',{name:'Right leg fracture',exact:true}).click();
+  const fracture=await page.evaluate(()=>({fracture:window.__IRON_SINEW__.player.anatomy.parts.rightLowerLeg.fracture,mobility:window.__IRON_SINEW__.player.anatomy.modifiers.movement}));
+  if(!fracture.fracture||fracture.mobility>=1)failures.push('Fracture mobility penalty failed');
+  await page.screenshot({path:'output/playwright/injury-laboratory.png'});
+  await page.getByRole('button',{name:'Reset selected character',exact:true}).click();
+  if(await page.evaluate(()=>window.__IRON_SINEW__.player.anatomy.bleeding)!==0)failures.push('Laboratory reset failed');
+  await page.getByRole('button',{name:'Close injury laboratory',exact:true}).click();
+  await page.getByRole('button',{name:'Controls and settings',exact:true}).click();
+  await page.getByRole('button',{name:'Close settings',exact:true}).click();
+  const simulation=await page.evaluate(()=>{
+    const g=window.__IRON_SINEW__;g.reset();g.ai.passive=true;g.paused=false;g.player.position.set(0,0,0);g.enemy.position.set(0,0,-1.35);g.player.root.rotation.y=0;g.enemy.root.rotation.y=Math.PI;
+    g.combat.startAttack(g.player,'low');for(let i=0;i<75;i++)g.step(1/60);
+    const hit=g.enemy.anatomy.lastHit;
+    const before=g.enemy.anatomy.blood;
+    g.enemy.anatomy.addInjury('neck','hemorrhage',30);g.enemy.addWound('neck',{magnitude:30});
+    for(let i=0;i<120;i++)g.step(1/60);
+    const after=g.enemy.anatomy.blood;
+    const p=g.player.position.clone();g.keys.add(g.controls.back);for(let i=0;i<30;i++)g.step(1/60);g.keys.clear();
+    const moved=g.player.position.distanceTo(p);
+    g.paused=true;g.ui.inspectEnemy=true;g.ui.update(0,true);
+    return {hit:hit?.bodyPart,before,after,moved,calls:g.renderer.info.render.calls,triangles:g.renderer.info.render.triangles};
+  });
+  if(!/Leg|Foot|Thigh/.test(simulation.hit||''))failures.push('Live weapon sweep failed');
+  if(simulation.after>=simulation.before)failures.push('Live bleeding tick failed');
+  if(simulation.moved<.2)failures.push('Movement simulation failed');
+  await page.screenshot({path:'output/playwright/combat-injuries.png'});
+  const outcome=await page.evaluate(()=>{
+    const g=window.__IRON_SINEW__;g.paused=false;
+    for(let i=0;i<2000&&!g.ended;i++)g.step(1/60);
+    for(let i=0;i<95;i++)g.step(1/60);
+    g.paused=true;return {ended:g.ended,cause:g.enemy.anatomy.cause,resultVisible:!document.querySelector('#result').classList.contains('hidden')};
+  });
+  if(!outcome.ended||!outcome.resultVisible)failures.push('Collapse / duel result failed');
+  await page.getByRole('button',{name:'Return to the yard →'}).click();
+  await page.evaluate(()=>{const g=window.__IRON_SINEW__;g.paused=true;g.started=false;g.ai.passive=false;g.ui.inspectEnemy=false;g.player.stance='Balanced';document.querySelector('#start-prompt').classList.remove('hidden');g.ui.update(0,true);});
+  await page.keyboard.press('Escape');
+  await page.screenshot({path:'output/playwright/arena-ready.png'});
+  const report={failures,errors,injury,fracture,simulation,outcome};
+  await page.evaluate(report=>{window.__TEST_REPORT__=report;window.__IRON_SINEW__.paused=false;},report);
+  if(failures.length||errors.length)throw new Error('Browser smoke test failed');
+}

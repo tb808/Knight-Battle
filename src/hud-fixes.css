@@ -1,0 +1,8 @@
+/* Keep status-bar typography independent of the active injury rows. */
+.stat-row.condition{gap:9px;margin:5px 0}
+.stat-row.condition>.icon{width:17px;height:17px;padding:0;border:none}
+.stat-row>span,.stat-row.condition>span{font-size:10px;margin:0;color:#e5dfca;display:inline;line-height:normal}
+.stat-row.condition .meter-fill{background:linear-gradient(90deg,#713a32,#b36651)}
+.status-title{background:linear-gradient(90deg,#15201b5c,transparent);padding-left:3px}
+.status-inner{padding-bottom:4px;background:linear-gradient(90deg,#19211b66,transparent)}
+.enemy .status-inner{background:linear-gradient(270deg,#19211b66,transparent)}
