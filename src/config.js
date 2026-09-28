@@ -3,7 +3,7 @@ export const BALANCE = {
   blood: { capacity: 100, weak: 76, severe: 49, critical: 29, collapse: 17, clotPerSecond: .002 },
   injury: { painMultiplier: 1, fractureThreshold: 23, severeFractureThreshold: 40, arteryThreshold: 22 },
   combat: { parryWindow: .19, guardRecovery: 10, staminaRecovery: 14, dodgeCost: 22, kickCost: 18 },
-  weaponMotion: { sensitivity: .006, yawLimit: 1.45, pitchMin: -.95, pitchMax: 1.25, response: 15, acceleration: 65, maxSpeed: 8, minimumSpeed: 1.15, minimumTravel: .12, rearmTravel: .38, contactCooldown: .2 },
+  impact: { minSpeed: 1.1, hitPause: .045, blockPause: .075, recoilDuration: .38, maxImpulse: 1.35 },
   movement: { speed: 2.5, sprint: 3.7, dodgeSpeed: 7.5, arenaRadius: 10.5 },
   performance: { particles: 180, groundMarks: 90, maxWoundsPerPart: 3, pixelRatio: 1.6 },
 };
@@ -18,6 +18,8 @@ export const WEAPONS = {
 };
 
 export const ARMOR = {
+  none: { label: 'Bare skin', cut: 0, pierce: 0, blunt: 0, durability: 0 },
+  trousers: { label: 'Linen trousers', cut: .025, pierce: .01, blunt: 0, durability: 0 },
   plate: { label: 'Steel plate', cut: .88, pierce: .55, blunt: .28, durability: 100 },
   mail: { label: 'Chainmail', cut: .64, pierce: .29, blunt: .12, durability: 75 },
   leather: { label: 'Leather', cut: .28, pierce: .14, blunt: .08, durability: 50 },
@@ -56,9 +58,8 @@ export const INJURIES = {
 
 export const DEFAULT_CONTROLS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', dodge: 'ShiftLeft',
-  kick: 'KeyE', stance: 'KeyQ', halfSword: 'KeyR', lock: 'AltLeft', thrust: 'Space',
-  freeLook: 'KeyC',
-  overhead: 'ArrowUp', low: 'ArrowDown', leftSlash: 'ArrowLeft', rightSlash: 'ArrowRight', debug: 'F2',
+  kick: 'KeyX', stance: 'KeyZ', halfSword: 'KeyT', lock: 'AltLeft', thrust: 'Space',
+  overhead: 'KeyR', low: 'KeyF', leftSlash: 'KeyQ', rightSlash: 'KeyE', debug: 'F2',
 };
 
 export const COLORS = { healthy: '#969b95', minor: '#c6ab66', medium: '#d28a49', severe: '#bd4d40', critical: '#6d2429' };

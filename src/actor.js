@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import { AnatomySystem } from './anatomy.js';
 import { BALANCE, BODY_PARTS, WEAPONS } from './config.js';
-import { box, mesh, cylinder, beam, mat, shield, weaponModel } from './geometry.js';
-import { WeaponMotion } from './weapon-motion.js';
+import { box, mesh, cylinder, mat, weaponModel } from './geometry.js';
 
 export class Character {
   constructor(scene, { name, player = false, color = '#75372e', position = [0, 0, 0] }) {
     this.name = name; this.isPlayer = player;
-    this.anatomy = new AnatomySystem();
+    this.anatomy = new AnatomySystem({unarmored:true});
     this.root = new THREE.Group(); this.root.position.set(...position); scene.add(this.root);
     this.rig = new THREE.Group(); this.root.add(this.rig);
     this.stamina = 100; this.guard = 100; this.weaponKey = 'longsword';
@@ -15,7 +14,7 @@ export class Character {
     this.dodge = 0; this.dodgeVector = new THREE.Vector3(); this.cooldown = 0;
     this.moving = 0; this.step = 0; this.collapse = 0; this.halfSword = false; this.stance = 'Balanced';
     this.parts = {}; this.wounds = []; this.hitFlash = 0;
-    this.weaponMotion = player ? new WeaponMotion() : null;
+    this.impactVelocity = new THREE.Vector3(); this.frameVelocity = new THREE.Vector3(); this.reaction = null;
     this.build(color);
     this.equip('longsword');
     this.blade = { hilt: new THREE.Vector3(), tip: new THREE.Vector3() };
@@ -24,67 +23,51 @@ export class Character {
   get position() { return this.root.position; }
   get alive() { return !this.anatomy.collapsed; }
   build(color) {
-    this.cloth = mat(color); this.metal = mat('#a4adae', .36, .47);
-    const silver = this.metal, dark = mat('#242b2a', .25), leather = mat('#493528'), gold = mat('#8c7849', .58);
+    this.cloth = mat(this.isPlayer ? '#4a5557' : color);
+    const skin = mat(this.isPlayer ? '#c09372' : '#ba8869', 0, .86);
+    const hair = mat(this.isPlayer ? '#352c25' : '#4a3325'), eyes = mat('#302a27');
     for (const def of BODY_PARTS) {
       const node = new THREE.Group(); node.position.set(...def.at); node.userData.base = node.position.clone(); this.rig.add(node);
+      const clothed = /Thigh|LowerLeg/.test(def.id), material = (clothed ? this.cloth : skin).clone();
       let piece;
-      const ownMetal = silver.clone();
       if (def.id === 'head') {
-        piece = cylinder(node, .13, .185, .37, 7, [0, 0, 0], ownMetal);
-        mesh(new THREE.ConeGeometry(.146, .12, 7), ownMetal, node, [0, .242, 0]);
-        box(node, [.275, .034, .017], [0, .045, -.163], dark);
-        box(node, [.045, .19, .035], [0, -.028, -.174], ownMetal);
-        for (const side of [-1, 1]) for (let i = 0; i < 3; i++) box(node, [.014, .009, .02], [side * (.064 + i * .026), -.045, -.165], dark);
-        const brim = cylinder(node, .192, .184, .024, 7, [0, -.181, 0], gold);
-        brim.scale.z = .97;
-      } else if (def.id === 'neck') piece = cylinder(node, .103, .13, .14, 8, [0, 0, 0], dark);
-      else if (def.id === 'torso') {
-        piece = cylinder(node, .275, .215, .53, 6, [0, 0, 0], ownMetal); piece.scale.z = .68;
-        const tabard = box(node, [.36, .48, .07], [0, -.008, -.184], this.cloth);
-        box(node, [.065, .31, .009], [0, .01, -.224], mat('#c0b294'));
-        box(node, [.235, .065, .009], [0, .065, -.226], mat('#c0b294'));
-        box(node, [.44, .072, .34], [0, -.26, 0], leather);
-        box(node, [.085, .08, .037], [0, -.262, -.185], gold);
-        // Split skirt panels expose articulated legs below the plate cuirass.
-        for (const side of [-1, 1]) {
-          const skirt = box(node, [.21, .36, .07], [side * .12, -.43, -.13], this.cloth); skirt.rotation.z = side * .11;
-          const tasset = box(node, [.16, .2, .075], [side * .215, -.32, .012], ownMetal); tasset.rotation.z = side * .22;
+        piece = mesh(new THREE.SphereGeometry(1,12,10),material,node);piece.scale.set(.167,.224,.17);
+        mesh(new THREE.SphereGeometry(1,12,6,0,Math.PI*2,0,Math.PI*.4),hair,node).scale.set(.171,.228,.174);
+        box(node,[.053,.074,.058],[0,-.01,-.17],material);
+        for(const side of [-1,1]){
+          box(node,[.037,.016,.014],[side*.065,.036,-.157],eyes);
+          box(node,[.051,.013,.014],[side*.065,.065,-.153],hair);
+          mesh(new THREE.SphereGeometry(.043,7,6),material,node,[side*.16,-.015,0]).scale.set(.55,1,.7);
         }
-        const cloakGeo = new THREE.BufferGeometry(), capeVertices=[];
-        const capePoint=(x,y)=>[(x/4-.5)*(.53+y*.045),.23-y*.2,.22+Math.sin(x*1.8+y)*.024+y*.025];
-        for(let y=0;y<5;y++)for(let x=0;x<4;x++){const a=capePoint(x,y),b=capePoint(x+1,y),c=capePoint(x,y+1),d=capePoint(x+1,y+1);capeVertices.push(...a,...b,...c,...b,...d,...c);}
-        cloakGeo.setAttribute('position', new THREE.Float32BufferAttribute(capeVertices,3)); cloakGeo.computeVertexNormals();
-        this.cape = mesh(cloakGeo, new THREE.MeshStandardMaterial({color,side:THREE.DoubleSide,flatShading:true,roughness:1}),node);
-        this.cape.receiveShadow=false;
-        beam(node,[-.23,.24,-.23],[.19,-.25,-.23],.045,leather,.025);
-      } else if (def.id.endsWith('UpperArm')) {
-        piece = cylinder(node, .151, .106, .29, 6, [0, -.01, 0], ownMetal);
-        mesh(new THREE.IcosahedronGeometry(.185, 0), ownMetal, node, [0, .11, 0]).scale.set(1.13,.74,1.04);
-        box(node, [.14,.13,.025], [0,.08,-.15], this.cloth);
-      } else if (def.id.endsWith('Forearm')) {
-        piece = cylinder(node, .099, .079, .27, 6, [0, 0, 0], ownMetal);
-        mesh(new THREE.IcosahedronGeometry(.105,0),silver,node,[0,.14,0]);
-        cylinder(node,.095,.095,.04,6,[0,-.1,0],gold);
-      } else if (def.id.endsWith('Hand')) piece = box(node,[.11,.15,.105],[0,0,0],ownMetal);
-      else if (def.id.endsWith('Thigh')) {
-        piece = cylinder(node,.138,.113,.37,6,[0,0,0],ownMetal);
-        box(node,[.17,.25,.04],[0,.015,-.113],this.cloth);
-      } else if (def.id.endsWith('LowerLeg')) {
-        piece = cylinder(node,.103,.067,.39,6,[0,-.015,0],ownMetal);
-        mesh(new THREE.IcosahedronGeometry(.12,0),ownMetal,node,[0,.17,-.016]).scale.set(1,.9,.9);
-      } else piece = box(node,[.16,.13,.29],[0,0,-.025],ownMetal);
-      this.parts[def.id] = { node, piece, material: ownMetal, baseColor: ownMetal.color.clone(), wounds: 0 };
+        box(node,[.061,.009,.01],[0,-.091,-.154],mat('#875e4c'));
+      } else if(def.id==='neck')piece=cylinder(node,.092,.105,.17,10,[0,0,0],material);
+      else if(def.id==='torso'){
+        // A continuous skin surface keeps contact decals visible across chest and back.
+        const profile=[new THREE.Vector2(.19,-.31),new THREE.Vector2(.21,-.19),new THREE.Vector2(.245,.02),new THREE.Vector2(.29,.19),new THREE.Vector2(.245,.27),new THREE.Vector2(.12,.31)];
+        piece=mesh(new THREE.LatheGeometry(profile,16),material,node);piece.scale.z=.65;
+        const detail=mat('#a5775d');
+        for(const side of [-1,1]){
+          const collar=box(node,[.135,.009,.006],[side*.115,.215,-.145],detail);collar.rotation.z=-side*.13;
+        }
+        box(node,[.008,.036,.007],[0,-.19,-.135],detail);
+      } else if(def.id.endsWith('UpperArm')){
+        piece=cylinder(node,.128,.096,.33,10,[0,0,0],material);
+        mesh(new THREE.SphereGeometry(.132,10,8),material,node,[0,.13,0]).scale.set(1,.85,1);
+      } else if(def.id.endsWith('Forearm'))piece=cylinder(node,.093,.067,.29,10,[0,0,0],material);
+      else if(def.id.endsWith('Hand'))piece=box(node,[.10,.15,.075],[0,0,0],material);
+      else if(def.id.endsWith('Thigh'))piece=cylinder(node,.139,.117,.42,10,[0,0,0],material);
+      else if(def.id.endsWith('LowerLeg'))piece=cylinder(node,.116,.071,.43,10,[0,-.005,0],material);
+      else piece=box(node,[.14,.12,.26],[0,0,-.04],material);
+      this.parts[def.id]={node,piece,material,baseColor:material.color.clone(),wounds:0};
     }
-    this.shield = shield(this.rig, this.cloth, silver, .8).group;
-    this.shield.position.set(-.55,1.12,-.2); this.shield.rotation.set(0,Math.PI+.2,-.12);
+    const waist=box(this.rig,[.43,.23,.29],[0,.955,0],this.cloth);
+    box(waist,[.44,.042,.30],[0,.09,0],mat('#3e3930'));
     this.weaponHolder = new THREE.Group(); this.rig.add(this.weaponHolder);
   }
   equip(key) {
     if (!WEAPONS[key]) return;
     if (this.weapon) { this.weaponHolder.remove(this.weapon); this.weapon.traverse(o => { if(o.isMesh){o.geometry.dispose(); o.material.dispose();} }); }
     this.weaponKey = key; this.weapon = weaponModel(key,this.weaponHolder);
-    this.weaponMotion?.reset();
   }
   face(target, dt = 1) {
     const angle = Math.atan2(this.position.x - target.x, this.position.z - target.z);
@@ -104,7 +87,8 @@ export class Character {
   }
   addWound(partId, result, hitPosition) {
     const part = this.parts[partId]; if (!part) return;
-    const bleeding = this.anatomy.parts[partId].bleeding > .02;
+    const injuryType=result?.injuryType||this.anatomy.parts[partId].injuries.at(-1)?.type;
+    const bleeding = ['cut','deepCut','puncture','hemorrhage'].includes(injuryType);
     if (part.wounds < BALANCE.performance.maxWoundsPerPart) {
       const local = hitPosition ? part.node.worldToLocal(new THREE.Vector3(hitPosition.x,hitPosition.y,hitPosition.z)) : new THREE.Vector3(0,0,this.isPlayer?.13:-.13);
       const normal = local.clone().normalize(); if(normal.lengthSq()<.1) normal.set(0,0,-1);
@@ -113,19 +97,26 @@ export class Character {
       const ray=new THREE.Raycaster(center.clone().addScaledVector(worldNormal,1),worldNormal.clone().negate(),0,2);
       const surface=ray.intersectObject(part.piece,false)[0];
       const surfacePoint=surface?part.node.worldToLocal(surface.point.clone()):normal.clone().multiplyScalar(this.anatomy.parts[partId].radius*.98);
-      if(surface?.face){normal.copy(surface.face.normal).transformDirection(part.piece.matrixWorld).applyQuaternion(rotation.invert()).normalize();}
-      const size = Math.min(.115,.026+(result?.magnitude || 20)*.002);
-      const mark = mesh(new THREE.CircleGeometry(size,6),new THREE.MeshStandardMaterial({color:bleeding?'#681d1c':'#4d4540',roughness:.9,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2}),part.node);
+      if(surface?.face){normal.copy(surface.face.normal).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(part.piece.matrixWorld)).applyQuaternion(rotation.invert()).normalize();}
+      const size = Math.min(.12,.035+(result?.magnitude || 20)*.0015);
+      const mark = mesh(new THREE.CircleGeometry(size,12),new THREE.MeshStandardMaterial({color:bleeding?'#792a25':'#66465b',roughness:.95,transparent:true,opacity:bleeding?.94:.65,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2}),part.node);
       mark.position.copy(surfacePoint).addScaledVector(normal,.004);
-      mark.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal.normalize()); mark.scale.set(.65,1.5,1);
+      mark.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal.normalize());
+      mark.scale.set(bleeding?(injuryType==='puncture'?.34:.2):.85,bleeding?(injuryType==='puncture'?.55:1.35):1,1);
+      if(result?.hitDirection){
+        const tangent=new THREE.Vector3(...result.hitDirection).applyQuaternion(part.node.getWorldQuaternion(new THREE.Quaternion()).invert()).applyQuaternion(mark.quaternion.clone().invert());
+        mark.rotateZ(Math.atan2(tangent.y,tangent.x)-Math.PI/2);
+      }else mark.rotateZ(.6);
+      mark.userData.injuryType=injuryType;mark.castShadow=false;mark.receiveShadow=false;
       part.wounds++; this.wounds.push(mark);
-      if(this.anatomy.parts[partId].armorCondition<85){
+      if(!this.anatomy.unarmored&&this.anatomy.parts[partId].armorCondition<85){
         const scratch=box(part.node,[.006,size*2.3,.002],mark.position.toArray(),mat('#ded7ba',.4));scratch.quaternion.copy(mark.quaternion);scratch.rotateZ(.35);this.wounds.push(scratch);
       }
     }
     this.hitFlash = .23;
   }
   reset(position) {
+    this.impactVelocity.set(0,0,0);this.frameVelocity.set(0,0,0);this.reaction=null;this.hitFlash=0;
     this.anatomy.reset(); this.stamina=100; this.guard=100; this.attack=null; this.blocking=false; this.cooldown=0; this.stagger=0; this.collapse=0; this.dodge=0;
     for(const mark of this.wounds){mark.removeFromParent();mark.geometry.dispose();mark.material.dispose();} this.wounds=[];
     for(const part of Object.values(this.parts))part.wounds=0;
@@ -141,8 +132,8 @@ export class Character {
       const injury=this.anatomy.parts[id];
       part.node.position.copy(part.node.userData.base); part.node.rotation.set(0,0,0);
       const bloodTint=injury.bleeding>0?new THREE.Color('#612a25'):new THREE.Color('#706655');
-      part.material.color.copy(part.baseColor).lerp(bloodTint,Math.min(.74,injury.severity/110));
-      part.material.roughness=.47+(100-injury.armorCondition)*.004;
+      part.material.color.copy(part.baseColor).lerp(bloodTint,Math.min(.22,injury.severity/350));
+      part.material.roughness=.86;
       if(id.includes('Thigh')||id.includes('LowerLeg')||id.includes('Foot')){
         const left=id.startsWith('left'), limp=left?modifiers.limpLeft:modifiers.limpRight;
         const step=Math.sin(this.step+(left?0:Math.PI)) * Math.min(.17,this.moving*.065)*(1-limp*.8);
@@ -152,13 +143,7 @@ export class Character {
     }
     this.rig.position.y=Math.sin(time*2)*.012+Math.abs(Math.sin(this.step))*this.moving*.008;
     this.rig.rotation.z=(modifiers.limpLeft-modifiers.limpRight)*Math.sin(this.step)*.16 + (this.hitFlash>0?Math.sin(this.hitFlash*30)*.035:0);
-    this.cape.rotation.x=Math.sin(time*3+this.step)*(.015+this.moving*.02);
-    const hilt=new THREE.Vector3(.46,1.0,-.27),tip=this.isPlayer?new THREE.Vector3(1.7,.69,-.75):new THREE.Vector3(.4,2.2,-.95);
-    if(this.weaponMotion){
-      const {yaw,pitch}=this.weaponMotion;
-      hilt.set(.14+Math.sin(yaw)*.18,1.3+Math.sin(pitch)*.12,-.3);
-      tip.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(1.8).add(hilt);
-    }
+    const hilt=new THREE.Vector3(.28,1.13,-.34),tip=new THREE.Vector3(.5,1.95,-1.12);
     const idleHilt=hilt.clone(),idleTip=tip.clone();
     if(this.blocking){hilt.set(.17,1.36,-.44);tip.set(-.2,2.05,-.64);}
     if(this.attack){
@@ -173,12 +158,17 @@ export class Character {
         this.parts.rightLowerLeg.node.position.set(.2,.55,-Math.sin(p*Math.PI)*.8);
         this.parts.rightFoot.node.position.set(.2,.52,-Math.sin(p*Math.PI)*1.04);
       }else{
-        const sign=a.direction==='right'?-1:1,angle=sign*(-1.28+swing*2.56);
+        const sign=a.direction==='left'?-1:1,angle=sign*(-1.28+swing*2.56);
         const height=a.direction==='low'?.46:1.25;
         hilt.set(.15,height,-.2);tip.set(Math.sin(angle)*1.8,height+(a.direction==='low'?0:Math.cos(angle)*.05),-.2-Math.cos(angle)*1.8);
       }
       const blend=p<.22?THREE.MathUtils.smoothstep(p,0,.2):p>.76?1-THREE.MathUtils.smoothstep(p,.76,1):1;
       hilt.lerpVectors(idleHilt,hilt.clone(),blend);tip.lerpVectors(idleTip,tip.clone(),blend);
+      if(a.recovery){
+        const r=a.recovery,weight=THREE.MathUtils.smoothstep(r.time,0,.26);
+        hilt.lerpVectors(r.hilt,idleHilt,weight);
+        tip.copy(r.hilt).addScaledVector(r.direction,1.8).lerp(idleTip,weight);
+      }
     }
     hilt.x+=Math.sin(time*11)*.06*(1-modifiers.coordination);tip.x+=Math.sin(time*8.3)*.16*(1-modifiers.coordination);
     this.weaponHolder.position.copy(hilt);
@@ -194,10 +184,31 @@ export class Character {
       node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
     }
     const armDrop=1-modifiers.attack;this.parts.rightUpperArm.node.rotation.z-=armDrop*.22;
-    this.shield.position.set(this.blocking?-.12:-.54,this.blocking?1.38:1.09,this.blocking?-.55:-.08);
-    this.shield.rotation.y=this.blocking?Math.PI:Math.PI+.35; this.shield.rotation.z=this.blocking?.06:-.18;
-    this.shield.visible=!this.halfSword;
-    if(this.halfSword){this.parts.leftHand.node.position.copy(hilt).addScaledVector(bladeDirection,.4);this.parts.leftForearm.node.position.lerp(this.parts.leftHand.node.position,.5);}
+    if(this.halfSword||this.blocking||['longsword','spear','axe'].includes(this.weaponKey)){
+      const leftGrip=hilt.clone().addScaledVector(bladeDirection,this.halfSword?.4:-.12);
+      this.parts.leftHand.node.position.copy(leftGrip);
+      const leftShoulder=new THREE.Vector3(-.38,1.51,0),leftElbow=leftShoulder.clone().lerp(leftGrip,.5).add(new THREE.Vector3(-.1,-.14,.05));
+      for(const [id,from,to]of [['leftUpperArm',leftShoulder,leftElbow],['leftForearm',leftElbow,leftGrip]]){
+        this.parts[id].node.position.copy(from).lerp(to,.5);
+        this.parts[id].node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
+      }
+    }
+    this.rig.rotation.y=0;
+    if(this.reaction){
+      this.reaction.time+=dt;
+      const r=this.reaction,t=r.time/BALANCE.impact.recoilDuration;
+      if(t>=1)this.reaction=null;
+      else{
+        const envelope=Math.sin(Math.min(1,t*3)*Math.PI/2)*(1-t);
+        const local=r.direction.clone().applyAxisAngle(new THREE.Vector3(0,1,0),-this.root.rotation.y);
+        this.rig.rotation.z-=local.x*r.strength*.13*envelope;
+        this.rig.rotation.y+=r.side*r.strength*.13*envelope;
+        const part=this.parts[r.part].node;
+        part.rotation.x+=local.z*r.strength*.3*envelope;
+        part.rotation.z-=local.x*r.strength*.25*envelope;
+        this.parts.torso.node.rotation.x+=local.z*r.strength*.12*envelope;
+      }
+    }
     if(!this.alive){this.collapse=Math.min(1,this.collapse+dt*1.8);this.rig.rotation.x=-this.collapse*1.45;this.rig.position.y=-this.collapse*.015;}
     else this.rig.rotation.x=this.stagger>0?.08:0;
     this.root.updateMatrixWorld(true);

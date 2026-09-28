@@ -21,9 +21,10 @@ export class BodyPart {
 }
 
 export class AnatomySystem {
-  constructor() { this.reset(); }
+  constructor({ unarmored = false } = {}) { this.unarmored = unarmored; this.reset(); }
   reset() {
     this.parts = Object.fromEntries(BODY_PARTS.map(def => [def.id, new BodyPart(def)]));
+    if(this.unarmored)for(const part of Object.values(this.parts))part.armor=/Thigh|LowerLeg/.test(part.id)?'trousers':'none';
     this.blood = BALANCE.blood.capacity;
     this.consciousness = 100;
     this.collapsed = false;
@@ -89,7 +90,7 @@ export class AnatomySystem {
     const damage = (type === 'blunt' ? weapon.blunt : weapon.cutting) * energy * (1 - Math.max(0, protection - penetration));
     const trauma = weapon.blunt * energy * (1 - armor.blunt) * (type === 'blunt' ? 1 : .58);
     const armorLoss = (damage * .32 + trauma * .27) * (weapon.mass / 1.6);
-    part.armorCondition = clamp(part.armorCondition - armorLoss);
+    if(armor.durability>0)part.armorCondition = clamp(part.armorCondition - armorLoss);
     let injuryType = 'bruise';
     if (type === 'blunt') {
       if (trauma >= BALANCE.injury.severeFractureThreshold) injuryType = 'severeFracture';

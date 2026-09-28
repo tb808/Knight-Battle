@@ -13,20 +13,25 @@ export class Effects {
   unlock(){try{this.audio??=new (window.AudioContext||window.webkitAudioContext)();this.audio.resume();}catch{/* Audio is optional when a device is unavailable. */}}
   sound(type='hit',strength=1){
     if(!this.audio||this.muted)return;
-    const ctx=this.audio,now=ctx.currentTime,duration=type==='parry'?.45:type==='step'?.07:.18;
+    const ctx=this.audio,now=ctx.currentTime,duration=type==='parry'?.32:type==='step'?.07:type==='flesh'?.12:.18;
     const gain=ctx.createGain();gain.gain.setValueAtTime((type==='step'?.025:.06)*strength,now);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);gain.connect(ctx.destination);
-    if(type==='swing'||type==='hit'||type==='step'||type==='pain'){
+    if(type==='swing'||type==='hit'||type==='step'||type==='pain'||type==='flesh'){
       const buffer=ctx.createBuffer(1,Math.floor(ctx.sampleRate*duration),ctx.sampleRate),data=buffer.getChannelData(0);
       for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
       const noise=ctx.createBufferSource();noise.buffer=buffer;const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=type==='swing'?1700:type==='step'?350:650;noise.connect(filter);filter.connect(gain);noise.start();
+      if(type==='flesh'){
+        const thud=ctx.createOscillator();thud.type='sine';thud.frequency.setValueAtTime(125,now);thud.frequency.exponentialRampToValueAtTime(43,now+duration);thud.connect(gain);thud.start(now);thud.stop(now+duration);
+      }
     }else{
       for(const f of [type==='parry'?1250:750,1830,2600]){const osc=ctx.createOscillator();osc.type='triangle';osc.frequency.setValueAtTime(f,now);osc.frequency.exponentialRampToValueAtTime(f*.83,now+duration);osc.connect(gain);osc.start(now);osc.stop(now+duration);}
     }
   }
-  burst(position,blood=true,amount=12){
+  burst(position,blood=true,amount=12,direction=null){
     for(let i=0;i<amount&&this.particles.length<BALANCE.performance.particles;i++){
       const p=new THREE.Mesh(this.geometry,blood?this.bloodMat:this.sparkMat);p.position.copy(position);p.scale.setScalar(blood?.6+Math.random():.45);this.scene.add(p);
-      this.particles.push({mesh:p,velocity:new THREE.Vector3((Math.random()-.5)*2.7,Math.random()*2.5,(Math.random()-.5)*2.7),life:.4+Math.random()*.4,blood});
+      const velocity=new THREE.Vector3((Math.random()-.5)*1.4,Math.random()*1.6,(Math.random()-.5)*1.4);
+      if(direction)velocity.addScaledVector(direction,.6+Math.random());
+      this.particles.push({mesh:p,velocity,life:.3+Math.random()*.35,blood});
     }
   }
   mark(position,size=.055){

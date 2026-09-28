@@ -10,9 +10,9 @@ async (page) => {
   const weapon=await page.evaluate(()=>window.__IRON_SINEW__.player.weaponKey);
   if(weapon!=='dagger')failures.push('Keyboard weapon equip failed');
   await page.keyboard.press('Digit1');
-  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('KeyF');
   if(await page.evaluate(()=>window.__IRON_SINEW__.direction)!=='low')failures.push('Directional input failed');
-  await page.keyboard.press('KeyQ');
+  await page.keyboard.press('KeyZ');
   if(await page.evaluate(()=>window.__IRON_SINEW__.player.stance)!=='Aggressive')failures.push('Stance input failed');
   await page.keyboard.press('F2');
   await page.locator('#debug-target').selectOption('player');

@@ -6,10 +6,8 @@
 .status-title{background:linear-gradient(90deg,#15201b5c,transparent);padding-left:3px}
 .status-inner{padding-bottom:4px;background:linear-gradient(90deg,#19211b66,transparent)}
 .enemy .status-inner{background:linear-gradient(270deg,#19211b66,transparent)}
-#weapon-aim-dot,#weapon-position-dot{position:absolute;left:calc(50% - 4px);top:calc(50% - 4px);width:8px;height:8px;border-radius:50%;pointer-events:none}
-#weapon-aim-dot{border:1px solid #f7e4b2;opacity:.5}
-#weapon-position-dot{background:#e7c789;box-shadow:0 0 8px #e7c789aa}
-#weapon-position-dot.striking{background:#f9e6b3;box-shadow:0 0 12px #ffe2a2}
-.swing-meter{height:3px;width:88px;background:#151b17aa;margin:7px auto 5px;overflow:hidden}
-.swing-meter i{display:block;height:100%;width:0;background:#e0bc74;transition:width .07s}
-.swing-instruction{font-size:7px;letter-spacing:1px;color:#e2d4b0}
+#reticle.impact{transform:translate(-50%,-50%) rotate(45deg) scale(1.4);opacity:1}
+#reticle.impact i{background:#f5d5b0}
+.controls-hint kbd b{font:inherit;padding:0 2px}
+.dir::after{display:none}
+.dir>span{color:#f0dfb6;transform:rotate(-45deg);font:600 12px 'Inter',sans-serif}
