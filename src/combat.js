@@ -34,6 +34,8 @@ export class CombatSystem {
         if(!clash&&afterDistance>.15&&control.weaponContact===target)control.weaponContact=null;
         if(clash&&!separating&&control.bladeSpeed>.05){
           control.stopAtContact();target.weaponControl.stopAtContact();
+          if(attacker.previousPosition)attacker.position.copy(attacker.previousPosition);
+          if(target.previousPosition)target.position.copy(target.previousPosition);
           attacker.animate(0,this.time);target.animate(0,this.time);
           if(control.weaponContact!==target&&this.time>=control.contactUntil){
             control.weaponContact=target;target.weaponControl.weaponContact=attacker;
@@ -70,7 +72,7 @@ export class CombatSystem {
         power:attacker.anatomy.modifiers.attack*(attacker.stance==='Aggressive'?1.12:attacker.stance==='Defensive'?.85:1)});
       if(!result)continue;
       control.lastContact={target,bodyPart:hit.bodyPart,until:this.time+WEAPON_CONTROL.contactCooldown,direction,separated:false};
-      control.lastImpact={point:hit.point,speed,alignment,bodyPart:hit.bodyPart};
+      control.lastImpact={point:hit.point,speed,alignment,bodyPart:hit.bodyPart,direction:direction.clone()};
       const position=new THREE.Vector3(hit.point.x,hit.point.y,hit.point.z);
       target.addWound(hit.bodyPart,result,hit.point);
       const impact=Math.min(1.5,weapon.mass*speed/12);

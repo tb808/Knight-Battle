@@ -11,7 +11,7 @@ async (page) => {
   if(weapon!=='dagger')failures.push('Keyboard weapon equip failed');
   await page.keyboard.press('Digit1');
   await page.keyboard.press('KeyF');
-  if(await page.evaluate(()=>window.__IRON_SINEW__.direction)!=='low')failures.push('Directional input failed');
+  if(await page.evaluate(()=>window.__IRON_SINEW__.player.weaponControl.active))failures.push('Legacy attack key activated weapon control');
   await page.keyboard.press('KeyZ');
   if(await page.evaluate(()=>window.__IRON_SINEW__.player.stance)!=='Aggressive')failures.push('Stance input failed');
   await page.keyboard.press('F2');
@@ -34,8 +34,9 @@ async (page) => {
   await page.getByRole('button',{name:'Controls and settings',exact:true}).click();
   await page.getByRole('button',{name:'Close settings',exact:true}).click();
   const simulation=await page.evaluate(()=>{
-    const g=window.__IRON_SINEW__;g.reset();g.ai.passive=true;g.paused=false;g.player.position.set(0,0,0);g.enemy.position.set(0,0,-1.35);g.player.root.rotation.y=0;g.enemy.root.rotation.y=Math.PI;
-    g.combat.startAttack(g.player,'low');for(let i=0;i<75;i++)g.step(1/60);
+    const g=window.__IRON_SINEW__;g.reset();g.ai.passive=true;g.paused=false;g.player.position.set(0,0,0);g.enemy.position.set(0,0,-1.6);g.player.root.rotation.y=0;g.enemy.root.rotation.y=Math.PI;
+    const ec=g.enemy.weaponControl;ec.config.readyYaw=1.2;ec.config.readyPitch=.7;ec.yaw=ec.desiredYaw=1.2;ec.pitch=ec.desiredPitch=.7;g.enemy.animate(0,g.time);
+    g.player.weaponControl.setActive(true);g.player.weaponControl.addMouseDelta(180,0);for(let i=0;i<75;i++)g.step(1/60);g.player.weaponControl.setActive(false);
     const hit=g.enemy.anatomy.lastHit;
     const before=g.enemy.anatomy.blood;
     g.enemy.anatomy.addInjury('neck','hemorrhage',30);g.enemy.addWound('neck',{magnitude:30});
@@ -46,7 +47,7 @@ async (page) => {
     g.paused=true;g.ui.inspectEnemy=true;g.ui.update(0,true);
     return {hit:hit?.bodyPart,before,after,moved,calls:g.renderer.info.render.calls,triangles:g.renderer.info.render.triangles};
   });
-  if(!/Leg|Foot|Thigh/.test(simulation.hit||''))failures.push('Live weapon sweep failed');
+  if(!simulation.hit)failures.push('Live weapon sweep failed');
   if(simulation.after>=simulation.before)failures.push('Live bleeding tick failed');
   if(simulation.moved<.2)failures.push('Movement simulation failed');
   await page.screenshot({path:'output/playwright/combat-injuries.png'});

@@ -10,7 +10,7 @@ async (page) => {
       g.player.position.set(x,0,z);g.cameraYaw=yaw;g.updateCamera(1);boundaries.push(g.camera.position.toArray());
     }
     const cameraSafe=boundaries.every(([x,y,z])=>x>=-10.551&&x<=10.551&&z>=-9.701&&z<=10.001&&y>.3);
-    g.reset();g.started=false;g.paused=false;g.ai.passive=false;g.direction='left';g.ui.updateDirection();g.ui.inspectEnemy=false;document.querySelector('#inspect-toggle').innerHTML='YOU <span>⇄</span>';document.querySelector('#start-prompt').classList.remove('hidden');g.ui.update(0,true);
+    g.reset();g.started=false;g.paused=false;g.ai.passive=false;g.ui.inspectEnemy=false;document.querySelector('#inspect-toggle').innerHTML='YOU <span>⇄</span>';document.querySelector('#start-prompt').classList.remove('hidden');g.ui.update(0,true);
     window.__AI_TEST_REPORT__={ai,cameraSafe,boundaries};return window.__AI_TEST_REPORT__;
   });
   if(!result.ai.playerInjuries.length)throw new Error('AI failed to inflict an anatomical injury in 30 seconds');

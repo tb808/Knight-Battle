@@ -17,6 +17,7 @@ export class WeaponControl {
     this.bladeSpeed = 0;
     this.previousYaw = this.yaw;
     this.previousPitch = this.pitch;
+    this.previousReach = this.reach;
     this.contactUntil = 0;
     this.weaponContact = null;
     this.lastImpact = null;
@@ -30,6 +31,7 @@ export class WeaponControl {
     this.mouseX = this.mouseY = this.springForce = this.controlError = this.bladeSpeed = 0;
     this.lastMouseX = this.lastMouseY = 0;
     this.previousYaw = this.yaw; this.previousPitch = this.pitch;
+    this.previousReach = this.reach;
     this.contactUntil = 0; this.lastImpact = null;
     this.weaponContact = null;
   }
@@ -48,6 +50,7 @@ export class WeaponControl {
   step(dt, thrust = false) {
     const c = this.config, weapon = WEAPONS[this.actor.weaponKey], dynamics = WEAPON_DYNAMICS[this.actor.weaponKey];
     this.previousYaw = this.yaw; this.previousPitch = this.pitch;
+    this.previousReach = this.reach;
     if (!this.active) {
       const returnRate = 1 - Math.exp(-dt * dynamics.recoverySpeed * 3);
       this.desiredYaw += (c.readyYaw - this.desiredYaw) * returnRate;
@@ -74,7 +77,8 @@ export class WeaponControl {
     this.reach = clamp(this.reach + this.reachVelocity * dt, 0, c.maxReach);
     this.controlError = Math.hypot(yawError, pitchError);
     this.springForce = Math.hypot(yawTorque, pitchTorque);
-    this.lastMouseX = this.mouseX; this.lastMouseY = this.mouseY;
+    this.lastMouseX = this.mouseX || this.lastMouseX * Math.exp(-dt*8);
+    this.lastMouseY = this.mouseY || this.lastMouseY * Math.exp(-dt*8);
     this.mouseX = this.mouseY = 0;
   }
   direction(yaw = this.yaw, pitch = this.pitch) {
@@ -82,6 +86,7 @@ export class WeaponControl {
   }
   stopAtContact() {
     this.yaw = this.previousYaw; this.pitch = this.previousPitch;
+    this.reach = this.previousReach;
     this.yawVelocity *= -.12; this.pitchVelocity *= -.12; this.reachVelocity *= -.12;
   }
   get telemetry() {

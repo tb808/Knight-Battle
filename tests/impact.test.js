@@ -15,10 +15,10 @@ function yard(distance=1.6,guard=false){
   if(!guard){enemy.weaponControl.yaw=enemy.weaponControl.desiredYaw=1.2;enemy.weaponControl.pitch=enemy.weaponControl.desiredPitch=.7;}
   enemy.animate(0,0);
   const combat=new CombatSystem({sound(){},burst(){}},event=>events.push(event));
-  const step=()=>{
+  const step=(thrust=false)=>{
     combat.time+=1/60;
     player.weaponPrevious=player.bladeWorld();enemy.weaponPrevious=enemy.bladeWorld();
-    player.weaponControl.step(1/60);player.animate(1/60,combat.time);enemy.animate(1/60,combat.time);
+    player.weaponControl.step(1/60,thrust);player.animate(1/60,combat.time);enemy.animate(1/60,combat.time);
     combat.resolve(player,[enemy],1/60);
   };
   return {player,enemy,combat,events,step};
@@ -56,6 +56,16 @@ test('Vertical, horizontal and diagonal input move the actual blade tip',()=>{
   c.addMouseDelta(-200,200);for(let i=0;i<60;i++)step();
   const reverse=player.bladeWorld().tip;
   assert.ok(reverse.x<diagonal.x-.5&&reverse.y<diagonal.y-.4);
+});
+
+test('Holding thrust pushes the grip forward and release pulls it back',()=>{
+  const {player,step}=yard(4);const control=player.weaponControl;control.setActive(true);
+  const ready=player.bladeWorld().hilt.z;
+  for(let i=0;i<25;i++)step(true);
+  const extended=player.bladeWorld().hilt.z;
+  assert.ok(extended<ready-.2&&control.reach>.2);
+  for(let i=0;i<60;i++)step(false);
+  assert.ok(player.bladeWorld().hilt.z>extended+.2&&control.reach<.1);
 });
 
 test('A fast manual crossing injures more than a slow crossing of the same enemy',()=>{

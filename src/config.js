@@ -2,8 +2,8 @@
 export const BALANCE = {
   blood: { capacity: 100, weak: 76, severe: 49, critical: 29, collapse: 17, clotPerSecond: .002 },
   injury: { painMultiplier: 1, fractureThreshold: 23, severeFractureThreshold: 40, arteryThreshold: 22 },
-  combat: { parryWindow: .19, guardRecovery: 10, staminaRecovery: 14, dodgeCost: 22, kickCost: 18 },
-  impact: { minSpeed: 1.1, hitPause: .045, blockPause: .075, recoilDuration: .38, maxImpulse: 1.35 },
+  combat: { guardRecovery: 10, staminaRecovery: 14, dodgeCost: 22 },
+  impact: { minSpeed: 1.1, recoilDuration: .38, maxImpulse: 1.35 },
   movement: { speed: 2.5, sprint: 3.7, dodgeSpeed: 7.5, arenaRadius: 10.5 },
   performance: { particles: 180, groundMarks: 90, maxWoundsPerPart: 3, pixelRatio: 1.6 },
 };

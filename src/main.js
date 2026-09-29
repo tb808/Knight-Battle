@@ -108,6 +108,7 @@ class Game {
     if(active&&!this.ended){
       this.elapsed+=dt;
       const previousPositions=this.actors.map(actor=>actor.position.clone());
+      for(const [index,actor]of this.actors.entries())actor.previousPosition=previousPositions[index];
       for(const actor of this.actors)actor.weaponPrevious=actor.bladeWorld();
       for(const actor of this.actors)this.combat.tick(actor,dt);
       this.player.weaponControl.step(dt,this.keys.has(this.controls.thrust));
@@ -172,7 +173,7 @@ class Game {
     if(!this.debugVisible){if(this.weaponDebugGroup)this.weaponDebugGroup.visible=false;return;}
     if(!this.weaponDebugGroup){
       this.weaponDebugGroup=new THREE.Group();this.scene.add(this.weaponDebugGroup);
-      const colors={target:'#f4d676',current:'#76d8e9',sweep:'#df7655',velocity:'#9beb85'};
+      const colors={target:'#f4d676',current:'#76d8e9',sweep:'#df7655',velocity:'#9beb85',impact:'#f54e75'};
       this.weaponDebugLines={};
       for(const [name,color] of Object.entries(colors)){
         const line=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color,depthTest:false}));
@@ -187,7 +188,9 @@ class Game {
     const desired=this.player.rig.localToWorld(this.player.weaponHolder.position.clone().addScaledVector(control.direction(control.desiredYaw,control.desiredPitch),WEAPONS[this.player.weaponKey].reach));
     this.weaponDebugTarget.position.copy(desired);
     const velocity=blade.tip.clone().sub(previous.tip).multiplyScalar(5);
-    const paths={target:[blade.hilt,desired],current:[blade.hilt,blade.tip],sweep:[previous.tip,blade.tip],velocity:[blade.tip,blade.tip.clone().add(velocity)]};
+    const impact=control.lastImpact;
+    const impactPoint=impact?new THREE.Vector3(impact.point.x,impact.point.y,impact.point.z):blade.tip;
+    const paths={target:[blade.hilt,desired],current:[blade.hilt,blade.tip],sweep:[previous.tip,blade.tip],velocity:[blade.tip,blade.tip.clone().add(velocity)],impact:[impactPoint,impactPoint.clone().addScaledVector(impact?.direction||new THREE.Vector3(),impact?.speed*.12||0)]};
     for(const [name,points] of Object.entries(paths)){this.weaponDebugLines[name].geometry.dispose();this.weaponDebugLines[name].geometry=new THREE.BufferGeometry().setFromPoints(points);}
     this.weaponDebugImpact.visible=!!control.lastImpact;
     if(control.lastImpact)this.weaponDebugImpact.position.set(control.lastImpact.point.x,control.lastImpact.point.y,control.lastImpact.point.z);
