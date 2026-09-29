@@ -12,7 +12,7 @@ export class WeaponControl {
     this.desiredPitch = this.pitch = config.readyPitch;
     this.yawVelocity = this.pitchVelocity = 0;
     this.desiredReach = this.reach = this.reachVelocity = 0;
-    this.mouseX = this.mouseY = this.springForce = this.controlError = 0;
+    this.mouseX = this.mouseY = this.springForce = this.controlError = this.damping = 0;
     this.lastMouseX = this.lastMouseY = 0;
     this.bladeSpeed = 0;
     this.previousYaw = this.yaw;
@@ -28,7 +28,7 @@ export class WeaponControl {
     this.desiredPitch = this.pitch = this.config.readyPitch;
     this.yawVelocity = this.pitchVelocity = 0;
     this.desiredReach = this.reach = this.reachVelocity = 0;
-    this.mouseX = this.mouseY = this.springForce = this.controlError = this.bladeSpeed = 0;
+    this.mouseX = this.mouseY = this.springForce = this.controlError = this.bladeSpeed = this.damping = 0;
     this.lastMouseX = this.lastMouseY = 0;
     this.previousYaw = this.yaw; this.previousPitch = this.pitch;
     this.previousReach = this.reach;
@@ -59,7 +59,8 @@ export class WeaponControl {
     this.desiredReach = this.active && thrust ? c.maxReach : 0;
     const inertia = Math.max(.15, weapon.mass * weapon.reach * weapon.reach * dynamics.inertiaMultiplier);
     const strength = (this.active ? c.springStrength : c.returnStrength) * dynamics.controlResponsiveness * this.actor.anatomy.modifiers.attack * (.45+.55*this.actor.stamina/100);
-    const damping = this.active ? c.springDamping : c.returnDamping;
+    const damping = (this.active ? c.springDamping : c.returnDamping) * Math.sqrt(inertia);
+    this.damping = damping;
     const accelerationLimit = c.maxAngularAcceleration / inertia;
     const velocityLimit = c.maxAngularVelocity / Math.sqrt(inertia);
     const yawError = this.desiredYaw - this.yaw, pitchError = this.desiredPitch - this.pitch;
@@ -93,6 +94,6 @@ export class WeaponControl {
     return { mouseX:this.lastMouseX, mouseY:this.lastMouseY, desiredYaw:this.desiredYaw, desiredPitch:this.desiredPitch,
       yaw:this.yaw, pitch:this.pitch, angularVelocity:Math.hypot(this.yawVelocity,this.pitchVelocity),
       bladeSpeed:this.bladeSpeed, controlError:this.controlError, springForce:this.springForce,
-      damping:this.config.springDamping, reach:this.reach, active:this.active };
+      damping:this.damping, reach:this.reach, active:this.active };
   }
 }

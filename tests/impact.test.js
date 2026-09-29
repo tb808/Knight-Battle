@@ -33,18 +33,31 @@ test('Bindings leave the mouse as the only player swing input',()=>{
 });
 
 test('Mouse deltas set free angular targets while inertia delays movement and reversal',()=>{
-  const {player,step}=yard();const control=player.weaponControl;
+  const {player,step}=yard(4);const control=player.weaponControl;
   control.setActive(true);control.addMouseDelta(180,-40);
   assert.ok(control.desiredYaw>0&&control.desiredPitch>WEAPON_CONTROL.readyPitch);
   step();assert.ok(control.yaw<0&&control.pitch<control.desiredPitch);
-  for(let i=0;i<20;i++)step();
-  assert.ok(control.yaw>-.4&&control.yawVelocity>0);
+  for(let i=0;i<8;i++)step();
+  assert.ok(control.yaw>0&&control.yawVelocity>0,'the sword should cross center within 150 ms');
   const before=control.yaw;
   control.addMouseDelta(-300,0);step();
-  assert.ok(control.yaw>before,'a heavy sword must not reverse in one frame');
+  assert.ok(control.yaw>before,'a moving sword should keep some momentum when reversing');
   for(let i=0;i<70;i++)step();
   assert.ok(control.yaw<before,'it should eventually follow the reversed target');
   assert.ok(Math.abs(control.yaw)<=WEAPON_CONTROL.horizontalRange);
+});
+
+test('Every weapon completes a mouse swing promptly and settles on target',()=>{
+  for(const weaponKey of Object.keys(WEAPONS)){
+    const {player,step}=yard(4);
+    player.equip(weaponKey);
+    const control=player.weaponControl;
+    control.setActive(true);control.addMouseDelta(180,0);
+    for(let i=0;i<12;i++)step();
+    assert.ok(control.yaw>0,`${weaponKey} should swing across center within 200 ms`);
+    for(let i=0;i<18;i++)step();
+    assert.ok(Math.abs(control.desiredYaw-control.yaw)<.2,`${weaponKey} should settle without wobbling`);
+  }
 });
 
 test('Vertical, horizontal and diagonal input move the actual blade tip',()=>{

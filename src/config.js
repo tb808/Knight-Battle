@@ -19,11 +19,11 @@ export const WEAPONS = {
 
 // Mouse motion changes intent; the weapon reaches that intent through torque.
 export const WEAPON_CONTROL = {
-  horizontalSensitivity: .008, verticalSensitivity: .007,
+  horizontalSensitivity: .01, verticalSensitivity: .009,
   horizontalRange: 100 * Math.PI / 180, verticalMin: -70 * Math.PI / 180,
   verticalMax: 80 * Math.PI / 180, readyYaw: -.72, readyPitch: .28,
-  springStrength: 100, springDamping: 15, maxAngularAcceleration: 48,
-  maxAngularVelocity: 8, returnStrength: 26, returnDamping: 11,
+  springStrength: 260, springDamping: 28, maxAngularAcceleration: 130,
+  maxAngularVelocity: 13, returnStrength: 90, returnDamping: 21,
   maxReach: .48, thrustSpeed: 3.1, reachSpring: 70, reachDamping: 13,
   torsoRotationInfluence: .19, ikStrength: 1,
   minimumDamageVelocity: 1.1, heavyDamageVelocity: 8,
@@ -31,12 +31,12 @@ export const WEAPON_CONTROL = {
 };
 
 export const WEAPON_DYNAMICS = {
-  longsword: { inertiaMultiplier: 1, controlResponsiveness: 1, recoverySpeed: 1, secondaryGrip: -.17 },
+  longsword: { inertiaMultiplier: .38, controlResponsiveness: 1, recoverySpeed: 1.2, secondaryGrip: -.17 },
   dagger: { inertiaMultiplier: .4, controlResponsiveness: 1.5, recoverySpeed: 1.4 },
-  axe: { inertiaMultiplier: 2.1, controlResponsiveness: .76, recoverySpeed: .7, secondaryGrip: -.13 },
-  spear: { inertiaMultiplier: 2.4, controlResponsiveness: .68, recoverySpeed: .7, secondaryGrip: -.2 },
-  mace: { inertiaMultiplier: 1.7, controlResponsiveness: .82, recoverySpeed: .8 },
-  arming: { inertiaMultiplier: .7, controlResponsiveness: 1.18, recoverySpeed: 1.18 },
+  axe: { inertiaMultiplier: .65, controlResponsiveness: .9, recoverySpeed: 1, secondaryGrip: -.13 },
+  spear: { inertiaMultiplier: .36, controlResponsiveness: .86, recoverySpeed: 1, secondaryGrip: -.2 },
+  mace: { inertiaMultiplier: .7, controlResponsiveness: .92, recoverySpeed: 1 },
+  arming: { inertiaMultiplier: .4, controlResponsiveness: 1.18, recoverySpeed: 1.3 },
 };
 
 export const ARMOR = {
