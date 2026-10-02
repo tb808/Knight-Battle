@@ -8,19 +8,20 @@ export function segmentSphere(a, b, center, radius) {
   return distanceSq <= radius * radius ? { point, t, distanceSq } : null;
 }
 
-export function sweepBlade(previous, current, colliders, radius = .055) {
+export function sweepBlade(previous, current, colliders, radius = .055, minT = .1) {
   const travel = Math.hypot(current.tip.x - previous.tip.x, current.tip.y - previous.tip.y, current.tip.z - previous.tip.z);
   const steps = Math.max(2, Math.ceil(travel / .055));
   const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
   for (let step = 0; step <= steps; step++) {
     const alpha = step / steps;
-    const hilt = lerp(previous.hilt, current.hilt, alpha), tip = lerp(previous.tip, current.tip, alpha);
+    const base = lerp(previous.hilt, current.hilt, alpha), tip = lerp(previous.tip, current.tip, alpha);
+    const hilt = lerp(base, tip, minT);
     let nearest = null;
     for (const collider of colliders) {
       const hit = segmentSphere(hilt, tip, collider.center, collider.radius + radius);
       if (hit && (!nearest || hit.t < nearest.t)) nearest = { ...hit, bodyPart: collider.id, sweepTime: alpha };
     }
-    if (nearest) return nearest;
+    if (nearest) return { ...nearest, t: minT + (1 - minT) * nearest.t };
   }
   return null;
 }

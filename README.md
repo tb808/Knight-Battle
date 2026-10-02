@@ -24,9 +24,11 @@ node 'C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js' install --cache .
 | Input | Action |
 | --- | --- |
 | WASD | Move toward, away from, or around the opponent while target locked |
-| Left mouse, held + mouse movement | Continuously guide and swing the weapon |
-| Mouse without left button | Turn the camera when target lock is off |
-| Space while guiding | Push the weapon forward for a thrust; release to pull back |
+| Mouse movement | Choose a horizontal, vertical, or diagonal cut; the arrow shows your intent |
+| Left mouse click | Strike; click during follow-through to buffer one connected attack |
+| Right mouse, held | Guard in front; raise guard just before impact to parry |
+| Mouse with target lock off | Turn the free camera |
+| Space | Thrust and retract automatically (also the default left-click attack for spear and dagger) |
 | Shift | Quick step; movement direction or backward |
 | Alt / middle mouse | Toggle target lock and automatic camera follow |
 | Scroll | Adjust camera distance |
@@ -40,9 +42,13 @@ node 'C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js' install --cache .
 
 The gear button opens the field manual and editable keyboard bindings, saved in local storage. Mouse buttons are fixed. Clicking the weapon slots also equips weapons. The **YOU ⇄** button switches the injury display between the player and opponent. The circular-arrow button restarts a duel.
 
-Holding left mouse routes raw browser mouse deltas to a desired weapon direction. A spring, damping, angular acceleration limit, and inertia move the weapon toward that target. Releasing the button lets it settle into its ready pose. No button starts a canned player attack. The enemy drives the same weapon controller through AI targets. Arm segments follow the weapon grips using two-bone IK, and the torso reacts to the swing. The longsword uses two hands. Other weapons have separate inertia and grip settings, though the longsword is the primary tuning target.
+Mouse motion selects a stroke direction without dragging the weapon into an extreme pose. A click performs preparation, a committed sweep, and a recovery. Direction can change during preparation; the sweep remains stable after commitment. One follow-up input is buffered for up to half a second and connects during recovery. Weapon speed determines stroke timing; injuries and fatigue slow it modestly. Stamina is charged per strike, rather than per mouse movement. Returning to ready cannot injure anyone.
 
-Target lock starts enabled. The camera follows the opponent while locked, allowing the mouse to control the weapon. Without lock, mouse movement turns the camera when left mouse is released. Press V to inspect live mouse deltas, desired/current angles, angular velocity, blade speed, control error, spring force, damping, and last impact. F2 includes editable weapon tuning values for the current session; permanent defaults are in `src/config.js`.
+Right mouse raises a frontal guard. Raising it within 160 ms of contact parries and briefly interrupts the attacker. Blocks spend guard and stamina; depleted guard leaves the defender staggered. Guards do not protect the back. Physical clashes between attacking or guarding blades deflect the stroke, without rewinding fighter positions or trapping the weapon. Shift performs a short, smoothly paced evasive step and cancels the current stroke. Held defense resumes after stagger or a dodge.
+
+Movement accelerates and brakes smoothly, with local-direction footwork and reduced stride while attacking or guarding. The shoulder camera follows the target with exponential smoothing. Rendering interpolates character and camera poses between fixed 60 Hz simulation steps, keeping collision transforms authoritative on high-refresh displays.
+
+Target lock starts enabled. Without lock, mouse movement turns the camera and also selects your next cut. Press V for weapon motion diagnostics. F2 includes response, input buffer, reach, and damage tuning; permanent defaults are in src/config.js. The HUD, field manual, and keyboard bindings describe the same controls.
 
 Both fighters wear linen trousers and have bare heads, torsos, arms and feet. They carry no shields. These exposed regions have no armor protection, including after a reset. Cuts follow the strike direction, punctures leave smaller marks, and blunt impacts leave bruises. Skin remains visible around injuries.
 
@@ -52,7 +58,7 @@ Both combatants instantiate the exact same `AnatomySystem`. Each has 15 independ
 
 Every region stores structural condition, tissue damage, pain, bleeding, cumulative blood lost, fracture state, armor condition, injuries, and derived functionality/mobility. The top condition bar is an aggregate readout; it is **not** an HP pool from which attacks subtract health.
 
-Weapon contacts carry attacker, target, weapon data, body part, relative velocity, impact point, blade region, and edge alignment. Fixed-step blade sweeps sample between weapon positions against anatomical colliders. Hits below the minimum speed cause no impact; faster hits produce more damage. Clean edge alignment cuts better than flat contact, while the blade base is less effective than the middle. A contact latch prevents repeated damage every frame. Swept blade-to-blade tests stop both weapons on contact, so a crossed sword can block a swing. Flesh uses a short impact sound; metallic effects mark weapon contact.
+Weapon contacts carry attacker, target, weapon data, body part, relative velocity, impact point, blade region, and edge alignment. Fixed-step blade sweeps sample between weapon positions against anatomical colliders. Hits below the minimum speed cause no impact; faster hits produce more damage. Clean edge alignment cuts better than flat contact, while the blade base is less effective than the middle. A per-stroke target latch prevents repeated damage. Only committed sweeps can hurt; the handle and the shafts of spears, axes and maces cannot cut. Swept blade-to-blade tests resolve contact before a later body hit. Flesh uses a short impact sound; metallic effects mark weapon contact.
 
 The live duel uses bare skin and thin trousers. The reusable anatomy model still supports armor for comparison tests. Punctures and exposed regions can bleed heavily. Major neck injury produces sustained blood loss rather than automatic death.
 
@@ -73,7 +79,7 @@ Edit **src/config.js** to tune weapons, material resistance, blood thresholds, i
 | `src/config.js` | Data-driven weapons, regions, armor, injuries, balance, bindings |
 | `src/anatomy.js` | Shared regional damage, blood, pain, function, consciousness |
 | `src/collision.js` | Swept blade/body and blade/blade collision |
-| `src/weapon-control.js` | Mouse target, spring/damping, inertia, and return motion |
+| `src/weapon-control.js` | Direction selection, stroke phases, buffering, guard and damped response |
 | `src/combat.js` | Impact resolution, physical blocking, stamina, dodge, enemy decisions |
 | `src/actor.js` | Fighters, two-hand grip and IK, damage zones, wounds |
 | `src/effects.js` | Bounded blood/sparks/ground marks and synthesized placeholder audio |
@@ -81,6 +87,7 @@ Edit **src/config.js** to tune weapons, material resistance, blood thresholds, i
 | `src/geometry.js` | Shared mesh builders and weapon/shield art |
 | `src/ui.js` | Live HUD, body diagram, telemetry, laboratory, manual, settings |
 | `src/main.js` | Input, camera collision, movement, simulation and rendering |
+| `src/motion.js` | Bounded movement acceleration and render pose interpolation |
 
 ## Verification
 
@@ -89,10 +96,10 @@ npm test
 npm run build
 ```
 
-The Node tests cover regional injuries, bleeding, mouse-driven blade travel, delayed reversals, fast-versus-slow impact damage, edge alignment, one-hit contact handling, weapon blocks, range misses, and AI use of the shared controller.
+The Node tests cover regional injuries and bleeding, directional selection, stroke commitment, one-input combos, all six weapon reaches, thrusts, one hit per stroke, guard/parry/break/back attacks, dodge cancellation, edge alignment, range misses, AI use of the shared controller, movement acceleration, and render interpolation. Controller response is compared at 30, 60, and 144 Hz.
 
-`tests/browser-smoke.playwright.js`, `tests/browser-ai.playwright.js`, and `tests/browser-weapon.playwright.js` are Playwright CLI `run-code --filename` scenarios for the live UI, injury lab, AI, camera bounds, and manual weapon input. Screenshots are written under `output/playwright/`. `window.__IRON_SINEW__` exposes the live game instance for reproducible development checks.
+`tests/browser-smoke.playwright.js`, `tests/browser-ai.playwright.js`, and `tests/browser-weapon.playwright.js` are Playwright CLI `run-code --filename` scenarios for the live UI, injury lab, AI, camera bounds, and directional attack/guard/thrust input. Screenshots are written under `output/playwright/`. `window.__IRON_SINEW__` exposes the live game instance for reproducible development checks.
 
 ## First-playable scope
 
-One player and one AI sparring partner, six configurable weapons, and one arena. The control and collision milestone is tuned around the longsword. It uses procedural weapon motion and approximate anatomical sphere colliders, rather than a full rigid-body or ragdoll simulation. Art and synthesized audio are functional placeholders.
+One player and one AI sparring partner, six configurable weapons, and one arena. All six weapons share the directional controller, with different speed, damage and reach. It uses procedural weapon motion and approximate anatomical sphere colliders, rather than a full rigid-body or ragdoll simulation. Art and synthesized audio are functional placeholders.

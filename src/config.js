@@ -2,9 +2,9 @@
 export const BALANCE = {
   blood: { capacity: 100, weak: 76, severe: 49, critical: 29, collapse: 17, clotPerSecond: .002 },
   injury: { painMultiplier: 1, fractureThreshold: 23, severeFractureThreshold: 40, arteryThreshold: 22 },
-  combat: { guardRecovery: 10, staminaRecovery: 14, dodgeCost: 22 },
+  combat: { guardRecovery: 18, staminaRecovery: 19, dodgeCost: 16, parryWindow: .16 },
   impact: { minSpeed: 1.1, recoilDuration: .38, maxImpulse: 1.35 },
-  movement: { speed: 2.5, sprint: 3.7, dodgeSpeed: 7.5, arenaRadius: 10.5 },
+  movement: { speed: 2.8, acceleration: 18, braking: 24, dodgeSpeed: 6.8, arenaRadius: 10.5 },
   performance: { particles: 180, groundMarks: 90, maxWoundsPerPart: 3, pixelRatio: 1.6 },
 };
 
@@ -17,26 +17,25 @@ export const WEAPONS = {
   arming: { name: 'Arming Sword', type: 'cut', mass: 1.1, speed: 1.18, penetration: .4, cutting: 29, blunt: 10, reach: 1.15, stamina: 16, icon: 'sword' },
 };
 
-// Mouse motion changes intent; the weapon reaches that intent through torque.
+// Directional strokes share timing and response across the player and opponent.
 export const WEAPON_CONTROL = {
-  horizontalSensitivity: .01, verticalSensitivity: .009,
   horizontalRange: 100 * Math.PI / 180, verticalMin: -70 * Math.PI / 180,
   verticalMax: 80 * Math.PI / 180, readyYaw: -.72, readyPitch: .28,
-  springStrength: 260, springDamping: 28, maxAngularAcceleration: 130,
-  maxAngularVelocity: 13, returnStrength: 90, returnDamping: 21,
-  maxReach: .48, thrustSpeed: 3.1, reachSpring: 70, reachDamping: 13,
-  torsoRotationInfluence: .19, ikStrength: 1,
+  springStrength: 1150,
+  maxAngularVelocity: 16, returnStrength: 350,
+  maxReach: .42, thrustSpeed: 4.5, inputBuffer: .5,
+  torsoRotationInfluence: .12, ikStrength: 1,
   minimumDamageVelocity: 1.1, heavyDamageVelocity: 8,
-  contactCooldown: .24, bladeRadius: .045,
+  bladeRadius: .045,
 };
 
 export const WEAPON_DYNAMICS = {
-  longsword: { inertiaMultiplier: .38, controlResponsiveness: 1, recoverySpeed: 1.2, secondaryGrip: -.17 },
-  dagger: { inertiaMultiplier: .4, controlResponsiveness: 1.5, recoverySpeed: 1.4 },
-  axe: { inertiaMultiplier: .65, controlResponsiveness: .9, recoverySpeed: 1, secondaryGrip: -.13 },
-  spear: { inertiaMultiplier: .36, controlResponsiveness: .86, recoverySpeed: 1, secondaryGrip: -.2 },
-  mace: { inertiaMultiplier: .7, controlResponsiveness: .92, recoverySpeed: 1 },
-  arming: { inertiaMultiplier: .4, controlResponsiveness: 1.18, recoverySpeed: 1.3 },
+  longsword: { controlResponsiveness: 1, secondaryGrip: -.17 },
+  dagger: { controlResponsiveness: 1.5 },
+  axe: { controlResponsiveness: .9, secondaryGrip: -.13 },
+  spear: { controlResponsiveness: .86, secondaryGrip: -.2 },
+  mace: { controlResponsiveness: .92 },
+  arming: { controlResponsiveness: 1.18 },
 };
 
 export const ARMOR = {

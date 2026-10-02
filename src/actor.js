@@ -16,7 +16,7 @@ export class Character {
     this.dodge = 0; this.dodgeVector = new THREE.Vector3();
     this.moving = 0; this.step = 0; this.collapse = 0; this.halfSword = false; this.stance = 'Balanced';
     this.parts = {}; this.wounds = []; this.hitFlash = 0;
-    this.impactVelocity = new THREE.Vector3(); this.frameVelocity = new THREE.Vector3(); this.reaction = null;
+    this.impactVelocity = new THREE.Vector3(); this.frameVelocity = new THREE.Vector3(); this.moveVelocity = new THREE.Vector3(); this.reaction = null;
     this.build(color);
     this.weaponControl = new WeaponControl(this);
     this.equip('longsword');
@@ -71,11 +71,12 @@ export class Character {
     if (!WEAPONS[key]) return;
     if (this.weapon) { this.weaponHolder.remove(this.weapon); this.weapon.traverse(o => { if(o.isMesh){o.geometry.dispose(); o.material.dispose();} }); }
     this.weaponKey = key; this.weapon = weaponModel(key,this.weaponHolder);
+    this.weaponControl?.reset();this.weaponPrevious=null;
   }
   face(target, dt = 1) {
     const angle = Math.atan2(this.position.x - target.x, this.position.z - target.z);
     const difference = Math.atan2(Math.sin(angle-this.root.rotation.y),Math.cos(angle-this.root.rotation.y));
-    this.root.rotation.y += difference * Math.min(1,dt*10);
+    this.root.rotation.y += difference * (1-Math.exp(-dt*14));
   }
   colliders() {
     this.root.updateMatrixWorld(true);
@@ -119,7 +120,7 @@ export class Character {
     this.hitFlash = .23;
   }
   reset(position) {
-    this.impactVelocity.set(0,0,0);this.frameVelocity.set(0,0,0);this.reaction=null;this.hitFlash=0;
+    this.impactVelocity.set(0,0,0);this.frameVelocity.set(0,0,0);this.moveVelocity.set(0,0,0);this.moving=0;this.step=0;this.reaction=null;this.hitFlash=0;
     this.anatomy.reset(); this.stamina=100; this.guard=100; this.blocking=false; this.stagger=0; this.collapse=0; this.dodge=0;
     for(const mark of this.wounds){mark.removeFromParent();mark.geometry.dispose();mark.material.dispose();} this.wounds=[];
     for(const part of Object.values(this.parts))part.wounds=0;
@@ -130,6 +131,7 @@ export class Character {
   }
   animate(dt,time) {
     const modifiers = this.anatomy.modifiers;
+    const travel=this.moveVelocity.clone().applyAxisAngle(new THREE.Vector3(0,1,0),-this.root.rotation.y);
     this.step += dt*this.moving*6;
     this.hitFlash=Math.max(0,this.hitFlash-dt);
     for(const [id,part] of Object.entries(this.parts)){
@@ -141,34 +143,44 @@ export class Character {
       if(id.includes('Thigh')||id.includes('LowerLeg')||id.includes('Foot')){
         const left=id.startsWith('left'), limp=left?modifiers.limpLeft:modifiers.limpRight;
         const step=Math.sin(this.step+(left?0:Math.PI)) * Math.min(.17,this.moving*.065)*(1-limp*.8);
-        part.node.position.z+=step; part.node.position.y+=Math.max(0,Math.cos(this.step+(left?0:Math.PI)))*this.moving*.017;
-        part.node.rotation.x=step*1.5+injury.fracture*.11;
+        part.node.position.z+=step*(-travel.z/Math.max(.1,this.moving));
+        part.node.position.x+=step*(-travel.x/Math.max(.1,this.moving))*.7;
+        part.node.position.y+=Math.max(0,Math.cos(this.step+(left?0:Math.PI)))*this.moving*.012;
+        part.node.rotation.x=step*(-travel.z/Math.max(.1,this.moving))+injury.fracture*.11;
       }
     }
     this.rig.position.y=Math.sin(time*2)*.012+Math.abs(Math.sin(this.step))*this.moving*.008;
     this.rig.rotation.z=(modifiers.limpLeft-modifiers.limpRight)*Math.sin(this.step)*.16 + (this.hitFlash>0?Math.sin(this.hitFlash*30)*.035:0);
     const hilt=new THREE.Vector3(.28,1.13,-.34),tip=new THREE.Vector3(.5,1.95,-1.12);
     const control=this.weaponControl, direction=control.direction();
-    hilt.set(.27+Math.sin(control.yaw)*.12,1.27+Math.sin(control.pitch)*.08,-.31-control.reach);
+    hilt.set(.22+Math.sin(control.yaw)*.16,1.32+Math.sin(control.pitch)*.14,-.32-control.reach*.78);
     tip.copy(hilt).addScaledVector(direction,WEAPONS[this.weaponKey].reach-(this.halfSword?.35:0));
-    this.parts.torso.node.rotation.y+=control.yaw*control.config.torsoRotationInfluence;
+    this.parts.torso.node.rotation.y+=control.yaw*.06;
     this.parts.torso.node.rotation.x-=control.pitch*.09;
     this.weaponHolder.position.copy(hilt);
     const bladeDirection=tip.sub(hilt).normalize();
-    this.weaponHolder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),bladeDirection);
+    // Keep the cutting edge in the stroke plane; shortest-arc orientation twists
+    // the wrist unpredictably on vertical and diagonal cuts.
+    const tangentYaw=new THREE.Vector3(Math.cos(control.yaw),0,Math.sin(control.yaw));
+    const tangentPitch=new THREE.Vector3(-Math.sin(control.yaw)*Math.sin(control.pitch),Math.cos(control.pitch),Math.cos(control.yaw)*Math.sin(control.pitch));
+    const edge=tangentYaw.multiplyScalar(Math.cos(control.roll)).addScaledVector(tangentPitch,Math.sin(control.roll)).normalize();
+    const flat=new THREE.Vector3().crossVectors(edge,bladeDirection).normalize();
+    this.weaponHolder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(edge,bladeDirection,flat));
     this.weapon.position.y=this.halfSword?-.35:0;
     // Two-bone arm IK: a single weapon grip drives each arm, with fixed segment lengths.
     const poseArm=(side,grip)=>{
       const left=side==='left',sign=left?-1:1;
-      const shoulder=new THREE.Vector3(sign*.38,1.51,0);
+      const shoulder=new THREE.Vector3(sign*.32,1.51,0);
       const offset=grip.clone().sub(shoulder),distance=Math.max(.001,offset.length());
       const direction=offset.clone().divideScalar(distance),upper=.43,lower=.44;
       const along=THREE.MathUtils.clamp((upper*upper-lower*lower+distance*distance)/(2*distance),-upper,upper);
       const bend=new THREE.Vector3(sign*.8,-.7,.45).addScaledVector(direction,-new THREE.Vector3(sign*.8,-.7,.45).dot(direction)).normalize();
       const elbow=shoulder.clone().addScaledVector(direction,along).addScaledVector(bend,Math.sqrt(Math.max(0,upper*upper-along*along))*(this.weaponControl?.config.ikStrength??WEAPON_CONTROL.ikStrength));
       this.parts[`${side}Hand`].node.position.copy(grip);
+      this.parts[`${side}Hand`].node.quaternion.copy(this.weaponHolder.quaternion);
       for(const [id,from,to] of [[`${side}UpperArm`,shoulder,elbow],[`${side}Forearm`,elbow,grip]]){
         const node=this.parts[id].node;node.position.copy(from).lerp(to,.5);
+        this.parts[id].piece.scale.y=from.distanceTo(to)/(id.endsWith('UpperArm')?.33:.29);
         node.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),from.clone().sub(to).normalize());
       }
     };

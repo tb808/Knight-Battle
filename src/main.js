@@ -7,6 +7,7 @@ import { CombatSystem, EnemyAI } from './combat.js';
 import { createArena } from './environment.js';
 import { Effects } from './effects.js';
 import { UI } from './ui.js';
+import { PoseInterpolation, accelerate } from './motion.js';
 
 class Game {
   constructor(){
@@ -23,27 +24,31 @@ class Game {
     this.enemy=new Character(this.scene,{name:'Training knight',color:'#7c4938',position:[.2,0,-.45]});
     this.enemy.root.rotation.y=Math.PI;this.actors=[this.player,this.enemy];this.effects=new Effects(this.scene);
     this.controls={...DEFAULT_CONTROLS};try{Object.assign(this.controls,JSON.parse(localStorage.getItem('iron-sinew-controls-v2')||'{}'));}catch{/* Defaults remain available when storage is disabled. */}
-    this.keys=new Set();this.locked=true;this.started=false;this.ended=false;this.paused=false;this.menuOpen=false;this.elapsed=0;this.time=0;this.cameraYaw=0;this.cameraPitch=.17;this.cameraDistance=3.3;this.shake=0;this.scratch=new THREE.Vector3();this.footstep=0;this.resultTimer=0;this.accumulator=0;this.debugVisible=false;
-    this.combat=new CombatSystem(this.effects,event=>{this.ui.event(event);if(event.type==='hit'){this.shake=Math.min(.085,(event.actor.isPlayer?.035:.012)+(event.impact||0)*.024);}if(event.type==='parry')this.shake=.09;});
+    this.keys=new Set();this.guardPressed=false;this.locked=true;this.started=false;this.ended=false;this.paused=false;this.menuOpen=false;this.elapsed=0;this.time=0;this.cameraYaw=0;this.cameraPitch=.17;this.cameraDistance=3.3;this.shake=0;this.scratch=new THREE.Vector3();this.footstep=0;this.resultTimer=0;this.accumulator=0;this.debugVisible=false;
+    this.combat=new CombatSystem(this.effects,event=>{this.ui.event(event);if(event.type==='hit'){this.shake=Math.min(.085,(event.actor.isPlayer?.035:.012)+(event.impact||0)*.024);}if(event.type==='parry')this.shake=.045;});
     this.ai=new EnemyAI(this.enemy);this.ui=new UI(this);this.bindInput();
     this.player.animate(0,0);this.enemy.animate(0,0);this.updateCamera(1);this.ui.update(0,true);
+    this.interpolation=new PoseInterpolation([this.camera,...this.actors.flatMap(actor=>[actor.root,actor.rig,actor.weaponHolder,...Object.values(actor.parts).map(part=>part.node)])]);
     this.last=performance.now();this.frame=this.frame.bind(this);requestAnimationFrame(this.frame);
   }
   start(){
     this.started=true;this.paused=false;document.querySelector('#pause-simulation').checked=false;document.querySelector('#pause-badge').classList.add('hidden');this.effects.unlock();document.querySelector('#start-prompt').classList.add('hidden');
-    this.capturePointer();this.ui.notify('Guide the steel.','Hold left mouse and move to swing · Space pushes forward');
+    this.capturePointer();this.ui.notify('Find your rhythm.','Mouse chooses direction · Click to strike · Right mouse to guard');
   }
   capturePointer(){
     if(this.ui.debugOpen||this.menuOpen||this.ended)return;
-    try{const request=this.canvas.requestPointerLock?.();request?.catch(()=>{document.querySelector('#pointer-hint').textContent='HOLD LEFT MOUSE + MOVE TO SWING';});}catch{document.querySelector('#pointer-hint').textContent='HOLD LEFT MOUSE + MOVE TO SWING';}
+    try{const request=this.canvas.requestPointerLock?.();request?.catch(()=>{document.querySelector('#pointer-hint').textContent='MOVE TO AIM · CLICK TO STRIKE · RIGHT MOUSE TO GUARD';});}catch{document.querySelector('#pointer-hint').textContent='MOVE TO AIM · CLICK TO STRIKE · RIGHT MOUSE TO GUARD';}
   }
-  releaseInput(){this.keys.clear();this.player.weaponControl.setActive(false);}
+  releaseInput(){this.keys.clear();this.guardPressed=false;this.player.weaponControl.cancel();}
+  attack(type=['spear','dagger'].includes(this.player.weaponKey)?'thrust':'cut'){if(!this.player.weaponControl.requestAttack(type)&&this.player.stamina<22)this.ui.notify('Catch your breath','Let your stamina recover.');}
   equip(key){this.player.equip(key);if(!['longsword','arming'].includes(key))this.player.halfSword=false;this.ui.notify(WEAPONS[key].name,`${WEAPONS[key].reach.toFixed(2)} m reach · ${WEAPONS[key].type==='blunt'?'Blunt trauma':WEAPONS[key].type==='pierce'?'Penetrating strikes':'Cut & thrust'}`);}
   reset(){
+    this.interpolation?.restore();
     this.releaseInput();
     this.player.reset([-.45,0,2.55]);this.enemy.reset([.2,0,-.45]);this.player.root.rotation.y=0;this.enemy.root.rotation.y=Math.PI;this.ai.attackTimer=2.2;this.ai.phase='idle';this.effects.reset();this.elapsed=0;this.ended=false;this.resultTimer=0;this.keys.clear();this.locked=true;this.cameraYaw=0;
     document.querySelector('#result').classList.add('hidden');document.querySelector('#event-log').innerHTML='';this.ui.notify('A new lesson','Steel yourself.');this.ui.update(0,true);
-    this.updateCamera(1);
+    this.cameraLook=null;this.updateCamera(1);
+    this.interpolation?.snap();
     if(!this.started)this.start();
   }
   bindInput(){
@@ -63,6 +68,7 @@ class Game {
       if(e.code===this.controls.halfSword){if(['longsword','arming'].includes(this.player.weaponKey)){this.player.halfSword=!this.player.halfSword;this.ui.notify(this.player.halfSword?'Half-sword':'Full grip',this.player.halfSword?'Precision thrusts · shortened grip':'Full reach restored');}else this.ui.notify('Sword stance','Equip a longsword or arming sword to half-sword.');}
       const weapons=['longsword','dagger','axe','spear','mace','arming'];if(/^Digit[1-6]$/.test(e.code))this.equip(weapons[Number(e.code.slice(-1))-1]);
       if(this.started&&!this.paused&&!this.ui.debugOpen){
+        if(e.code===this.controls.thrust)this.attack('thrust');
         if(e.code===this.controls.dodge){let dir=this.inputDirection();if(dir.lengthSq()<.1)dir=new THREE.Vector3(0,0,1).applyAxisAngle(new THREE.Vector3(0,1,0),this.player.root.rotation.y);this.combat.dodge(this.player,dir);}
       }
     });
@@ -73,15 +79,16 @@ class Game {
     this.canvas.addEventListener('mousedown',e=>{
       if(!this.started){this.start();return;}if(this.ended||this.paused||this.menuOpen||this.ui.debugOpen)return;
       this.effects.unlock();
-      if(e.button===0){this.player.weaponControl.setActive(true);if(document.pointerLockElement!==this.canvas)this.capturePointer();}
+      if(e.button===0){this.attack();if(document.pointerLockElement!==this.canvas)this.capturePointer();}
+      if(e.button===2){e.preventDefault();this.guardPressed=true;this.player.weaponControl.setGuard(true);if(document.pointerLockElement!==this.canvas)this.capturePointer();}
       if(e.button===1){e.preventDefault();this.locked=!this.locked;}
     });
-    window.addEventListener('mouseup',e=>{if(e.button===0)this.player.weaponControl.setActive(false);});
-    document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==this.canvas)this.releaseInput();document.querySelector('#pointer-hint').textContent=document.pointerLockElement===this.canvas?'HOLD LEFT MOUSE + MOVE TO SWING · SPACE TO THRUST':'CLICK THE ARENA · HOLD LEFT MOUSE + MOVE TO SWING';});
+    window.addEventListener('mouseup',e=>{if(e.button===2){this.guardPressed=false;this.player.weaponControl.setGuard(false);}});
+    document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==this.canvas)this.releaseInput();document.querySelector('#pointer-hint').textContent=document.pointerLockElement===this.canvas?'MOUSE: DIRECTION · CLICK: STRIKE · RIGHT MOUSE: GUARD · SPACE: THRUST':'CLICK THE ARENA · MOUSE: DIRECTION · RIGHT MOUSE: GUARD';});
     window.addEventListener('mousemove',e=>{
       if(!this.started||this.paused||this.menuOpen||this.ui.debugOpen||this.ended)return;
       if(document.pointerLockElement!==this.canvas&&e.target!==this.canvas)return;
-      if(this.player.weaponControl.active){this.player.weaponControl.addMouseDelta(e.movementX||0,e.movementY||0);return;}
+      this.player.weaponControl.addMouseDelta(e.movementX||0,e.movementY||0);
       if(this.locked)return;
       this.cameraYaw-=(e.movementX||0)*.002;
       this.cameraPitch=THREE.MathUtils.clamp(this.cameraPitch+(e.movementY||0)*.0016,-.25,.85);
@@ -95,12 +102,14 @@ class Game {
     const yaw=this.locked&&this.enemy.alive?Math.atan2(this.player.position.x-this.enemy.position.x,this.player.position.z-this.enemy.position.z):this.cameraYaw;
     return new THREE.Vector3(x,0,z).applyAxisAngle(new THREE.Vector3(0,1,0),yaw).normalize();
   }
-  move(actor,direction,dt,speed){
+  move(actor,direction,dt,speed,impulse=false){
     if(!actor.alive)return;
-    const movement=direction.clone().multiplyScalar(speed*dt);actor.position.add(movement);
+    const target=direction.clone().multiplyScalar(speed);
+    const velocity=impulse?target:accelerate(actor.moveVelocity,target,direction.lengthSq()>0?BALANCE.movement.acceleration:BALANCE.movement.braking,dt);
+    const movement=velocity.clone().multiplyScalar(dt);actor.position.add(movement);
     actor.position.x=THREE.MathUtils.clamp(actor.position.x,-10.1,10.1);actor.position.z=THREE.MathUtils.clamp(actor.position.z,-9.3,9.3);
     for(const obstacle of this.arena.obstacles){const dx=actor.position.x-obstacle.x,dz=actor.position.z-obstacle.z,d=Math.hypot(dx,dz),r=obstacle.radius+.34;if(d<r&&d>.001){actor.position.x=obstacle.x+dx/d*r;actor.position.z=obstacle.z+dz/d*r;}}
-    actor.moving=direction.length()*speed;
+    if(!impulse)actor.moving=velocity.length();
   }
   step(dt){
     this.time+=dt;this.combat.time=this.time;
@@ -111,12 +120,17 @@ class Game {
       for(const [index,actor]of this.actors.entries())actor.previousPosition=previousPositions[index];
       for(const actor of this.actors)actor.weaponPrevious=actor.bladeWorld();
       for(const actor of this.actors)this.combat.tick(actor,dt);
-      this.player.weaponControl.step(dt,this.keys.has(this.controls.thrust));
+      this.player.weaponControl.setGuard(this.guardPressed);
+      this.player.weaponControl.step(dt);
       const p=this.player,mod=p.anatomy.modifiers;
       let direction=this.inputDirection();
       if(p.stagger>0)direction.set(0,0,0);
-      if(p.dodge>0)this.move(p,p.dodgeVector,dt,BALANCE.movement.dodgeSpeed*mod.movement);
-      else this.move(p,direction,dt,BALANCE.movement.speed*mod.movement);
+      if(p.dodge>0){
+        const duration=.22*mod.movement+.1,progress=1-p.dodge/duration;
+        this.move(p,p.dodgeVector,dt,BALANCE.movement.dodgeSpeed*mod.movement*(.4+.6*Math.sin(progress*Math.PI)),true);
+        p.moveVelocity.copy(p.dodgeVector).multiplyScalar(BALANCE.movement.speed);p.moving=BALANCE.movement.speed;
+      }
+      else this.move(p,direction,dt,BALANCE.movement.speed*mod.movement*(p.blocking?.7:p.weaponControl.attack?.88:1));
       if(this.locked&&this.enemy.alive)p.face(this.enemy.position,dt);
       else p.face(p.position.clone().add(new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0),this.cameraYaw)),dt);
       this.ai.update(dt,p,this.combat,this.move.bind(this));
@@ -126,7 +140,7 @@ class Game {
       if(distance<.68&&distance>.001){difference.normalize().multiplyScalar((.68-distance)*.5);p.position.sub(difference);this.enemy.position.add(difference);}
       for(const [index,actor]of this.actors.entries()){
         const moving=actor.moving;
-        if(actor.impactVelocity.lengthSq()>.0001)this.move(actor,actor.impactVelocity,dt,1);
+        if(actor.impactVelocity.lengthSq()>.0001)this.move(actor,actor.impactVelocity,dt,1,true);
         actor.moving=moving;actor.impactVelocity.multiplyScalar(Math.exp(-dt*9));
         actor.frameVelocity.copy(actor.position).sub(previousPositions[index]).divideScalar(dt);
         actor.animate(dt,this.time);
@@ -140,15 +154,16 @@ class Game {
     }else if(!this.paused&&!this.menuOpen){for(const actor of this.actors)actor.animate(dt,this.time);}
     if(active)this.effects.update(dt,this.actors);
     this.arena.update(this.time);this.updateCamera(dt);this.ui.update(this.time);this.updateWeaponDebug();
+    this.interpolation?.afterStep();
   }
   updateCamera(dt){
     const p=this.player;
     if(this.locked&&this.enemy.alive){
       const desiredYaw=Math.atan2(p.position.x-this.enemy.position.x,p.position.z-this.enemy.position.z);
-      this.cameraYaw+=Math.atan2(Math.sin(desiredYaw-this.cameraYaw),Math.cos(desiredYaw-this.cameraYaw))*(1-Math.exp(-dt*3));
+      this.cameraYaw+=Math.atan2(Math.sin(desiredYaw-this.cameraYaw),Math.cos(desiredYaw-this.cameraYaw))*(1-Math.exp(-dt*6));
     }
     const rotation=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),this.cameraYaw);
-    const pivot=p.position.clone().add(new THREE.Vector3(.72,1.43,0).applyQuaternion(rotation));
+    const pivot=p.position.clone().add(new THREE.Vector3(1.18,1.43,0).applyQuaternion(rotation));
     const desired=pivot.clone().add(new THREE.Vector3(0,Math.sin(this.cameraPitch)*this.cameraDistance,Math.cos(this.cameraPitch)*this.cameraDistance).applyQuaternion(rotation));
     // Shorten the camera boom at all four yard boundaries before smoothing.
     let fraction=1;const offset=desired.clone().sub(pivot);
@@ -164,8 +179,10 @@ class Game {
     this.camera.position.lerp(desired,1-Math.exp(-dt*9));
     this.camera.position.x=THREE.MathUtils.clamp(this.camera.position.x,-10.55,10.55);this.camera.position.z=THREE.MathUtils.clamp(this.camera.position.z,-9.7,10);
     this.shake=Math.max(0,this.shake-dt*.3);this.camera.position.x+=Math.sin(this.time*91)*this.shake;this.camera.position.y+=Math.cos(this.time*77)*this.shake*.6;
-    const look=pivot.clone().add(new THREE.Vector3(-.72,-.04-Math.sin(this.cameraPitch)*2,-3).applyQuaternion(rotation));
-    this.camera.lookAt(look);
+    const look=this.locked&&this.enemy.alive?this.enemy.position.clone().add(new THREE.Vector3(0,1.4,0)):
+      pivot.clone().add(new THREE.Vector3(-1.18,-.04-Math.sin(this.cameraPitch)*2,-3).applyQuaternion(rotation));
+    this.cameraLook??=look.clone();this.cameraLook.lerp(look,1-Math.exp(-dt*8));
+    this.camera.lookAt(this.cameraLook);
     const enemyPoint=this.enemy.position.clone().add(new THREE.Vector3(0,2.3,0)).project(this.camera),marker=document.querySelector('#target-marker');
     marker.style.left=`${(enemyPoint.x*.5+.5)*innerWidth}px`;marker.style.top=`${(-enemyPoint.y*.5+.5)*innerHeight}px`;marker.style.display=this.enemy.alive&&enemyPoint.z<1&&Math.abs(enemyPoint.x)<1?'flex':'none';marker.style.opacity=this.locked?'1':'.35';
   }
@@ -196,9 +213,11 @@ class Game {
     if(control.lastImpact)this.weaponDebugImpact.position.set(control.lastImpact.point.x,control.lastImpact.point.y,control.lastImpact.point.z);
   }
   frame(now){
+    this.interpolation.restore();
     const delta=Math.min(.1,(now-this.last)/1000);this.last=now;this.accumulator+=delta;
     // Fixed simulation steps make fast blade sweeps and bleeding independent of frame rate.
-    let iterations=0;while(this.accumulator>=1/60&&iterations<6){this.step(1/60);this.accumulator-=1/60;iterations++;}
+    let iterations=0;while(this.accumulator>=1/60&&iterations<6){this.interpolation.beforeStep();this.step(1/60);this.accumulator-=1/60;iterations++;}
+    this.interpolation.render(this.accumulator*60);
     this.renderer.render(this.scene,this.camera);requestAnimationFrame(this.frame);
   }
 }

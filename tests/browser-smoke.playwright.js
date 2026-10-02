@@ -36,7 +36,7 @@ async (page) => {
   const simulation=await page.evaluate(()=>{
     const g=window.__IRON_SINEW__;g.reset();g.ai.passive=true;g.paused=false;g.player.position.set(0,0,0);g.enemy.position.set(0,0,-1.6);g.player.root.rotation.y=0;g.enemy.root.rotation.y=Math.PI;
     const ec=g.enemy.weaponControl;ec.config.readyYaw=1.2;ec.config.readyPitch=.7;ec.yaw=ec.desiredYaw=1.2;ec.pitch=ec.desiredPitch=.7;g.enemy.animate(0,g.time);
-    g.player.weaponControl.setActive(true);g.player.weaponControl.addMouseDelta(180,0);for(let i=0;i<75;i++)g.step(1/60);g.player.weaponControl.setActive(false);
+    g.player.weaponControl.requestAttack();for(let i=0;i<75;i++)g.step(1/60);
     const hit=g.enemy.anatomy.lastHit;
     const before=g.enemy.anatomy.blood;
     g.enemy.anatomy.addInjury('neck','hemorrhage',30);g.enemy.addWound('neck',{magnitude:30});
